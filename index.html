@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Checkmate Voice - Voice Enabled Chess</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">♚</div>
+    <h1>Checkmate Voice</h1>
+  </div>
+  <div class="header-controls">
+    <button class="btn-icon" id="mute-btn" title="Toggle sound">🔊</button>
+    <button class="btn" onclick="resetGame()">↺ Reset</button>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT: Board -->
+  <div class="board-col">
+    <div class="board-wrapper">
+      <div class="board-with-coords">
+        <div class="coords-rank" id="rank-coords"></div>
+        <div class="board-container">
+          <div id="board"></div>
+          <div id="gameover-overlay">
+            <div id="gameover-title">Checkmate</div>
+            <div id="gameover-sub">White wins the game.</div>
+            <button class="btn" onclick="resetGame()">Play Again</button>
+          </div>
+        </div>
+      </div>
+      <div class="coords-row" id="file-coords"></div>
+    </div>
+
+    <div class="status-bar">
+      <div class="turn-indicator">
+        <div class="turn-dot white" id="turn-dot"></div>
+        <span id="turn-label">White's Turn</span>
+      </div>
+      <span id="check-label">CHECK</span>
+      <span id="fen-preview" style="color:var(--text-dim);font-size:0.6rem"></span>
+    </div>
+  </div>
+
+  <!-- RIGHT: Voice + History -->
+  <div class="right-col">
+    <div class="voice-panel">
+      <div class="panel-label">
+        <div class="dot-live"></div>
+        Voice Assistant — White Only
+      </div>
+
+      <div id="assistant-msg">"Welcome! Say something like — pawn to e4."</div>
+
+      <div class="voice-controls">
+        <button id="mic-btn">🎤 Hold to Speak</button>
+      </div>
+
+      <div class="processing-dots" id="processing">
+        <span></span><span></span><span></span>
+        <span style="margin-left:4px">Processing…</span>
+      </div>
+
+      <div class="voice-tips">
+        Try: <span>"pawn to e4"</span> · <span>"knight to f3"</span> · <span>"castle kingside"</span>
+      </div>
+    </div>
+
+    <div class="history-panel">
+      <div class="history-header">
+        <span>Move History</span>
+        <span id="move-count" style="color:var(--text-dim)">0 moves</span>
+      </div>
+      <div id="history-list">
+        <div class="empty-history">No moves yet. White to move.</div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="game.js"></script>
+</body>
+</html>
