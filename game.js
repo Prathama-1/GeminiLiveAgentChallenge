@@ -14,7 +14,9 @@ let chess = new Chess();
 let selectedSq = null;
 let legalMoves = [];
 let lastMove = null;
-let moveHistory = [];
+let moveHistory = [];   // { san, color, from, to }
+let fenHistory = [];    // FEN after each move (index matches moveHistory)
+let viewingIndex = -1; // -1 = live, 0..N = viewing past move
 let isMuted = false;
 let isListening = false;
 let isProcessing = false;
@@ -125,11 +127,13 @@ function updateBoard() {
 
 function handleDrop(targetSq) {
   if (!dragSrc) return;
+  if (viewingIndex !== -1) { setMessage("You're viewing a past position. Click ▶ Return to Live to play."); dragSrc = null; return; }
   tryMove(dragSrc, targetSq);
   dragSrc = null;
 }
 
 function handleSquareClick(sq) {
+  if (viewingIndex !== -1) { setMessage("You're viewing a past position. Click ▶ Return to Live to play."); return; }
   if (chess.turn() !== 'w') return; // only white clicks
 
   const piece = chess.get(sq);
@@ -163,39 +167,31 @@ function handleSquareClick(sq) {
 }
 
 function tryMove(from, to, promotion) {
-  // check if this is a promotion
+  // If viewing past, restore live position first before making a new move
+  if (viewingIndex !== -1) returnToLive();
+
   const piece = chess.get(from);
   const isPromotion = piece && piece.type === 'p' &&
     ((piece.color === 'w' && to[1] === '8') || (piece.color === 'b' && to[1] === '1'));
 
-  const moveObj = {
-    from,
-    to,
-    promotion: promotion || (isPromotion ? 'q' : undefined)
-  };
-
-  const result = chess.move(moveObj);
+  const result = chess.move({ from, to, promotion: promotion || (isPromotion ? 'q' : undefined) });
   if (!result) {
-    selectedSq = null;
-    legalMoves = [];
-    updateBoard();
+    selectedSq = null; legalMoves = []; updateBoard();
     return false;
   }
 
-  // success
-  lastMove = { from, to };
-  selectedSq = null;
-  legalMoves = [];
-  moveHistory.push({ san: result.san, color: result.color });
-  updateHistory();
+  // Store FEN snapshot after this move
+  lastMove = { from: result.from, to: result.to };
+  selectedSq = null; legalMoves = [];
+  moveHistory.push({ san: result.san, color: result.color, from: result.from, to: result.to });
+  fenHistory.push(chess.fen());
+  viewingIndex = -1; // back to live
+
+  updateHistory(true);
   updateBoard();
   checkGameOver();
 
-  // black plays after white
-  if (!chess.game_over() && chess.turn() === 'b') {
-    setTimeout(blackMove, 600);
-  }
-
+  if (!chess.game_over() && chess.turn() === 'b') setTimeout(blackMove, 600);
   return true;
 }
 
@@ -206,7 +202,9 @@ function blackMove() {
   const result = chess.move(move);
   if (result) {
     lastMove = { from: result.from, to: result.to };
-    moveHistory.push({ san: result.san, color: result.color });
+    moveHistory.push({ san: result.san, color: result.color, from: result.from, to: result.to });
+    fenHistory.push(chess.fen());
+    viewingIndex = -1;
     updateHistory();
     updateBoard();
     checkGameOver();
@@ -243,7 +241,7 @@ function updateStatus() {
   fenPreview.textContent = chess.fen().substring(0, 18) + '…';
 }
 
-function updateHistory() {
+function updateHistory(scrollToBottom) {
   const list = document.getElementById('history-list');
   const count = document.getElementById('move-count');
   list.innerHTML = '';
@@ -251,35 +249,92 @@ function updateHistory() {
 
   if (!moveHistory.length) {
     list.innerHTML = '<div class="empty-history">No moves yet. White to move.</div>';
+    updateRewindBanner();
     return;
   }
 
+  const activeIdx = viewingIndex === -1 ? moveHistory.length - 1 : viewingIndex;
+
   moveHistory.forEach((m, i) => {
     const div = document.createElement('div');
-    div.className = 'history-move';
     const isWhite = m.color === 'w';
+    const isActive = i === activeIdx;
+    div.className = 'history-move' + (isActive ? ' active-move' : '');
+    div.title = 'Jump to this position';
     div.innerHTML = `
       <span class="move-num">${isWhite ? Math.floor(i/2)+1+'.' : '…'}</span>
       <span class="move-san ${isWhite ? 'white-move' : 'black-move'}">${m.san}</span>
     `;
+    div.addEventListener('click', () => jumpToMove(i));
     list.appendChild(div);
   });
 
-  // scroll to bottom
-  list.scrollTop = list.scrollHeight;
+  // scroll active move into view
+  const activeEl = list.querySelector('.active-move');
+  if (activeEl) {
+    if (scrollToBottom) list.scrollTop = list.scrollHeight;
+    else activeEl.scrollIntoView({ block: 'nearest' });
+  }
+
+  updateRewindBanner();
+}
+
+function jumpToMove(index) {
+  if (index < 0 || index >= moveHistory.length) return;
+  if (index === viewingIndex) return;
+  viewingIndex = index;
+
+  // Load the stored FEN at that point
+  chess = new Chess(fenHistory[index]);
+
+  // Reconstruct lastMove highlight from stored move data
+  const m = moveHistory[index];
+  lastMove = m.from ? { from: m.from, to: m.to } : null;
+
+  selectedSq = null; legalMoves = [];
+  updateBoard();
+  updateHistory();
+  updateRewindBanner();
+  setMessage(`Viewing move ${Math.floor(index/2)+1}: ${m.san}`);
+}
+
+function returnToLive() {
+  viewingIndex = -1;
+  // Restore chess to the actual latest position
+  if (fenHistory.length > 0) {
+    chess = new Chess(fenHistory[fenHistory.length - 1]);
+    const last = moveHistory[moveHistory.length - 1];
+    lastMove = last ? { from: last.from, to: last.to } : null;
+  }
+  selectedSq = null; legalMoves = [];
+  updateBoard();
+  updateHistory(true);
+  updateRewindBanner();
+  setMessage("Back to live position.");
+}
+
+function updateRewindBanner() {
+  const banner = document.getElementById('rewind-banner');
+  if (!banner) return;
+  if (viewingIndex !== -1 && moveHistory.length > 0) {
+    banner.style.display = 'flex';
+    banner.querySelector('#rewind-label').textContent =
+      `Move ${Math.floor(viewingIndex/2)+1} of ${Math.floor((moveHistory.length-1)/2)+1}`;
+  } else {
+    banner.style.display = 'none';
+  }
 }
 
 function resetGame() {
   chess = new Chess();
-  selectedSq = null;
-  legalMoves = [];
-  lastMove = null;
-  moveHistory = [];
+  selectedSq = null; legalMoves = []; lastMove = null;
+  moveHistory = []; fenHistory = []; viewingIndex = -1;
   dragSrc = null;
   document.getElementById('gameover-overlay').classList.remove('visible');
   setMessage("Game reset. White to move.");
   updateHistory();
   updateBoard();
+  updateRewindBanner();
 }
 
 // ─── VOICE ────────────────────────────────────────────────────
@@ -304,6 +359,7 @@ function initSpeech() {
 
 function startListening() {
   if (!SR) return;
+  if (viewingIndex !== -1) { setMessage("Return to live position before using voice."); return; }
   if (chess.turn() !== 'w') { setMessage("Voice is only for White. Wait for Black's move."); return; }
   if (chess.game_over()) return;
   if (isListening) return;
@@ -378,20 +434,20 @@ const RANKS = ['1','2','3','4','5','6','7','8'];
 
 const WORD_TO_FILE = {
   'alpha':'a', 'a':'a',
-  'bravo':'b','b':'b',
-  'charlie':'c','c':'c','see':'c','sea':'c',
-  'delta':'d','d':'d','dee':'d',
-  'echo':'e','e':'e','ee':'e',
-  'foxtrot':'f','f':'f','ef':'f',
-  'golf':'g','g':'g','gee':'g','ji':'g','jay':'g',
-  'hotel':'h','h':'h','aitch':'h','ach':'h'
+  'bravo':'b', 'b':'b',
+  'charlie':'c', 'c':'c', 'see':'c', 'sea':'c',
+  'delta':'d', 'd':'d', 'dee':'d',
+  'echo':'e', 'e':'e', 'ee':'e',
+  'foxtrot':'f', 'f':'f', 'ef':'f',
+  'golf':'g', 'g':'g', 'gee':'g', 'ji':'g', 'jay':'g',
+  'hotel':'h', 'h':'h', 'aitch':'h', 'ach':'h'
 };
 
 const PIECE_WORDS = {
-  'pawn':'p','pawns':'p',
-  'knight':'n','horse':'n',
+  'pawn':'p', 'pawns':'p',
+  'knight':'n', 'horse':'n',
   'bishop':'b',
-  'rook':'r','castle':'r','castles':'r',
+  'rook':'r', 'castle':'r', 'castles':'r',
   'queen':'q',
   'king':'k'
 };

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Checkmate Voice - Voice Enabled Chess</title>
+<title>Checkmate Voice</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
 <link rel="stylesheet" href="style.css">
@@ -46,6 +46,15 @@
       </div>
       <span id="check-label">CHECK</span>
       <span id="fen-preview" style="color:var(--text-dim);font-size:0.6rem"></span>
+    </div>
+
+    <div id="rewind-banner" style="display:none">
+      <span class="rewind-icon">⏪</span>
+      <span id="rewind-label">Viewing past move</span>
+      <div style="flex:1"></div>
+      <button class="rewind-nav" onclick="jumpToMove(Math.max(0, viewingIndex - 1))">‹ Prev</button>
+      <button class="rewind-nav" onclick="jumpToMove(Math.min(moveHistory.length - 1, viewingIndex + 1))">Next ›</button>
+      <button class="rewind-live" onclick="returnToLive()">▶ Return to Live</button>
     </div>
   </div>
 
