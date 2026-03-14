@@ -35,6 +35,7 @@ let viewingIndex = -1;   // -1 = live; 0..N = past move
 let isMuted = false;
 let isListening = false;
 let dragSrc = null;
+let lastAmbiguity = null;  // { pieceType, to } — remembers last ambiguous move for follow-up
 
 // ─── BUILD BOARD (once on load) ──────────────────────────────
 function buildBoard() {
@@ -191,6 +192,7 @@ function tryMove(from, to, promotion) {
   if (!result) { selectedSq = null; legalMoves = []; updateBoard(); return false; }
 
   lastMove = { from: result.from, to: result.to };
+  lastAmbiguity = null;  // clear after successful move
   selectedSq = null; legalMoves = []; viewingIndex = -1;
   moveHistory.push({ san: result.san, color: result.color, from: result.from, to: result.to });
   fenHistory.push(chess.fen());
@@ -241,7 +243,6 @@ function updateStatus() {
   document.getElementById('turn-dot').className = 'turn-dot ' + (turn === 'w' ? 'white' : 'black');
   document.getElementById('turn-label').textContent = turn === 'w' ? "White's Turn" : "Black's Turn (Engine)";
   document.getElementById('check-label').classList.toggle('visible', chess.in_check());
-  document.getElementById('fen-preview').textContent = chess.fen().substring(0, 18) + '…';
 }
 
 // ─── HISTORY PANEL ───────────────────────────────────────────
@@ -318,7 +319,7 @@ function updateRewindBanner() {
 function resetGame() {
   chess = new Chess();
   selectedSq = null; legalMoves = []; lastMove = null;
-  moveHistory = []; fenHistory = []; viewingIndex = -1; dragSrc = null;
+  moveHistory = []; fenHistory = []; viewingIndex = -1; dragSrc = null; lastAmbiguity = null;
   document.getElementById('gameover-overlay').classList.remove('visible');
   setMessage("Game reset. White to move.");
   updateHistory(); updateBoard(); updateRewindBanner();
@@ -365,7 +366,6 @@ function startListening() {
     const transcripts = [];
     for (let i = 0; i < e.results[0].length; i++)
       transcripts.push(e.results[0][i].transcript.trim());
-    console.log("Voice heard:", transcripts);
     setMessage(`Heard: "${transcripts[0]}"`);
     processVoiceCommand(transcripts[0], transcripts);
   };
@@ -448,52 +448,113 @@ function normalizeSquare(word) {
 }
 
 function parseVoiceMove(text) {
+  const original = text;
   text = text.toLowerCase().replace(/[.,!?]/g, '');
+
+  // ── Step 1: Collapse any spaces between SAN-style tokens ──────────
+  // Browser often hears "Nfd4" as "NFD 4", "N F D 4", "nf d4" etc.
+  // Join all tokens first, then try to parse the joined string.
   const words = text.split(/\s+/);
-  const squares = [];
+  const joined = words.join(''); // e.g. "nfd4", "nfd4", "knight f d 4"
+
+  let pieceType = null;
+  let fileHint = null;
   let promotion = 'q';
 
-  for (const w of words)
-    if (PIECE_WORDS[w] && ['q', 'r', 'b', 'n'].includes(PIECE_WORDS[w])) promotion = PIECE_WORDS[w];
-
-  for (let i = 0; i < words.length; i++) {
-    // Skip pure piece words and filler words — they are not squares
-    if (PIECE_WORDS[words[i]] || ['to', 'from', 'the', 'my', 'a'].includes(words[i])) continue;
-
-    // Try single word first (e.g. "e4", "d4")
-    const sq = normalizeSquare(words[i]);
-    if (sq) {
-      if (!squares.includes(sq)) squares.push(sq); // deduplicate
-      continue;
+  // ── Step 2: Detect piece word from individual tokens ─────────────
+  for (const w of words) {
+    if (PIECE_WORDS[w] && !pieceType) {
+      pieceType = PIECE_WORDS[w];
     }
+  }
 
-    // Try joining with next word (e.g. "echo" + "4" → "e4")
-    if (i + 1 < words.length) {
-      const sq2 = normalizeSquare(words[i] + words[i + 1]);
-      if (sq2) {
-        if (!squares.includes(sq2)) squares.push(sq2);
-        i++; continue;
+  // ── Step 3: Try to detect SAN patterns in joined string ──────────
+  // Handles: "nfd4", "ned4", "bbd5", "rfe1" etc.
+  // Also: "fd4" with no piece letter (browser drops the N)
+  const SAN_REGEX = /^([pnbrqk])([a-h])([a-h][1-8])$/;
+  const sanMatch = joined.match(SAN_REGEX);
+  if (sanMatch) {
+    pieceType = PIECE_WORDS[sanMatch[1]] || sanMatch[1];
+    fileHint = sanMatch[2];
+    return { to: sanMatch[3], pieceType, fileHint, promotion };
+  }
+
+  // "fd4", "ed4" — file hint + square, no piece letter (browser dropped it)
+  // Return fileHint so processVoiceCommand can use lastAmbiguity context
+  const FILE_SQ_REGEX = /^([a-h])([a-h][1-8])$/;
+  const fileSqMatch = joined.match(FILE_SQ_REGEX);
+  if (fileSqMatch) {
+    return { to: fileSqMatch[2], pieceType: null, fileHint: fileSqMatch[1], promotion };
+  }
+
+  // Full piece word prefix: "knightfd4", "knightfd4", "bishopbd5"
+  for (const [pword, ptype] of Object.entries(PIECE_WORDS)) {
+    if (joined.startsWith(pword)) {
+      const rest = joined.slice(pword.length);
+      const fileSquare = rest.match(/^([a-h])([a-h][1-8])$/);
+      if (fileSquare) {
+        return { to: fileSquare[2], pieceType: ptype, fileHint: fileSquare[1], promotion };
+      }
+      const justSquare = rest.match(/^([a-h][1-8])$/);
+      if (justSquare) {
+        return { to: justSquare[1], pieceType: ptype, fileHint: null, promotion };
       }
     }
   }
 
-  // Two explicit squares: "e2 to e4" or "e2 e4"
-  if (squares.length >= 2) return { from: squares[0], to: squares[1], promotion };
-
-  if (text.includes('castle kingside') || text.includes('king side') || text.includes('short castle'))
+  // ── Step 4: Castling ─────────────────────────────────────────────
+  if (text.includes('castle kingside') || text.includes('king side') || text.includes('short castle') || joined === 'oo')
     return { special: 'castle-kingside' };
-  if (text.includes('castle queenside') || text.includes('queen side') || text.includes('long castle'))
+  if (text.includes('castle queenside') || text.includes('queen side') || text.includes('long castle') || joined === 'ooo')
     return { special: 'castle-queenside' };
 
-  // One square: "pawn to e4", "knight d4"
+  // ── Step 5: Normal square-based parsing ──────────────────────────
+  const squares = [];
+
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+
+    // Skip filler and piece words
+    if (PIECE_WORDS[w] || ['to', 'from', 'the', 'my', 'a', 'at'].includes(w)) continue;
+
+    // Bare file hint right after piece word (e.g. "knight F d4" → skip "f")
+    if (FILES.includes(w) && w.length === 1 && i > 0 && PIECE_WORDS[words[i - 1]]) {
+      fileHint = w;
+      continue;
+    }
+
+    // SAN word like "nfd4" as single token
+    const sanW = w.match(/^([pnbrqk])([a-h])([a-h][1-8])$/);
+    if (sanW) {
+      if (!pieceType) pieceType = PIECE_WORDS[sanW[1]] || sanW[1];
+      fileHint = sanW[2];
+      const sq = sanW[3];
+      if (!squares.includes(sq)) squares.push(sq);
+      continue;
+    }
+
+    // Normal 2-char square "e4", "d4"
+    const sq = normalizeSquare(w);
+    if (sq) { if (!squares.includes(sq)) squares.push(sq); continue; }
+
+    // Two-word square: "echo 4" → "e4"
+    if (i + 1 < words.length) {
+      const sq2 = normalizeSquare(w + words[i + 1]);
+      if (sq2) { if (!squares.includes(sq2)) squares.push(sq2); i++; continue; }
+    }
+  }
+
+  // Two squares = from + to
+  if (squares.length >= 2) return { from: squares[0], to: squares[1], promotion };
+
+  // One square = destination
   if (squares.length === 1) {
-    let pieceType = null;
-    for (const w of words) if (PIECE_WORDS[w]) { pieceType = PIECE_WORDS[w]; break; }
-    return { to: squares[0], pieceType, promotion };
+    return { to: squares[0], pieceType, fileHint, promotion };
   }
 
   return null;
 }
+
 
 function processVoiceCommand(text, alternatives) {
   if (chess.turn() !== 'w') { setMessage("It's not White's turn."); return; }
@@ -532,6 +593,21 @@ function processVoiceCommand(text, alternatives) {
     }
 
     if (parsed.to) {
+      // ── If we have a fileHint but no pieceType, try to resolve using lastAmbiguity ──
+      let resolvedPieceType = parsed.pieceType;
+      if (!resolvedPieceType && parsed.fileHint && lastAmbiguity && lastAmbiguity.to === parsed.to) {
+        resolvedPieceType = lastAmbiguity.pieceType;
+      }
+      // Also: if fileHint+to resolves to exactly one candidate from lastAmbiguity, use it
+      if (!resolvedPieceType && parsed.fileHint && lastAmbiguity) {
+        const fromFile = lastAmbiguity.candidates &&
+          lastAmbiguity.candidates.find(m => m.from[0] === parsed.fileHint);
+        if (fromFile) {
+          resolvedPieceType = fromFile.piece;
+          // If the to squares differ, it might be a different move entirely — let it fall through
+        }
+      }
+
       // Get all legal moves to this square, verified against actual board state
       let allToSquare = chess.moves({ verbose: true })
         .filter(m => m.to === parsed.to)
@@ -540,7 +616,7 @@ function processVoiceCommand(text, alternatives) {
           return p && p.type === m.piece && p.color === chess.turn();
         });
 
-      // Deduplicate by from+piece (promotion variants appear 4x)
+      // Deduplicate by from+piece
       const seen = new Set();
       allToSquare = allToSquare.filter(m => {
         const key = m.from + m.piece;
@@ -550,19 +626,19 @@ function processVoiceCommand(text, alternatives) {
 
       let candidates = allToSquare;
 
-      // Apply piece type filter if we know what piece was said
-      if (parsed.pieceType) {
-        candidates = allToSquare.filter(m => m.piece === parsed.pieceType);
+      // Apply piece type filter
+      if (resolvedPieceType) {
+        candidates = allToSquare.filter(m => m.piece === resolvedPieceType);
       } else {
-        // No piece word heard — check if all candidates are the same piece type
-        // If so, use them (e.g. 2 knights both going to d4, no pawn)
-        const pieceTypes = [...new Set(allToSquare.map(m => m.piece))];
-        if (pieceTypes.length > 1) {
-          // Mixed pieces: remove pawns as they are unlikely to be intended
-          // when user says just a square (pawns are said without piece name)
-          const nonPawn = allToSquare.filter(m => m.piece !== 'p');
-          if (nonPawn.length > 0) candidates = nonPawn;
-        }
+        // No piece word — remove pawns
+        const nonPawn = allToSquare.filter(m => m.piece !== 'p');
+        if (nonPawn.length > 0) candidates = nonPawn;
+      }
+
+      // Apply file hint — "fd4" → only pieces coming from f-file
+      if (parsed.fileHint && candidates.length > 1) {
+        const hinted = candidates.filter(m => m.from[0] === parsed.fileHint);
+        if (hinted.length > 0) candidates = hinted;
       }
 
       if (candidates.length === 1) {
@@ -573,10 +649,20 @@ function processVoiceCommand(text, alternatives) {
           setMessage(msg); speak(msg); return;
         }
       } else if (candidates.length > 1) {
-        const pName = { p: 'Pawn', n: 'Knight', b: 'Bishop', r: 'Rook', q: 'Queen', k: 'King' }[candidates[0].piece] || 'piece';
-        const fromList = candidates.map(m => m.from).join(' or ');
-        const msg = `Which ${pName}? From ${fromList}?`;
-        setMessage(msg); speak(msg); return;
+        const PNAME = { p: 'Pawn', n: 'Knight', b: 'Bishop', r: 'Rook', q: 'Queen', k: 'King' };
+        const PSHORT = { p: 'P', n: 'N', b: 'B', r: 'R', q: 'Q', k: 'K' };
+        const pName = PNAME[candidates[0].piece] || 'piece';
+        const pShort = PSHORT[candidates[0].piece] || '';
+        const dest = parsed.to;  // e.g. "d4"
+
+        // Build examples: "Nfd4 or Ned4" and "Knight fd4 or Knight ed4"
+        const shortExamples = candidates.map(m => pShort + m.from[0] + dest).join(' or ');
+        const longExamples = candidates.map(m => pName + ' ' + m.from[0] + dest).join(' or ');
+
+        const spokenMsg = `Ambiguous. Two ${pName}s can go to ${dest}. Say ${longExamples}.`;
+        const displayMsg = `Two ${pName}s can reach ${dest}.
+Say: "${shortExamples}" or "${longExamples}"`;
+        setMessage(displayMsg); speak(spokenMsg); return;
       } else {
         continue;
       }
