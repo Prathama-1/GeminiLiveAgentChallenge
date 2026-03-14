@@ -415,11 +415,11 @@ const WORD_TO_FILE = {
 };
 
 const PIECE_WORDS = {
-  'pawn': 'p', 'pawns': 'p',
-  'knight': 'n', 'horse': 'n',
-  'bishop': 'b',
-  'rook': 'r', 'castle': 'r',
-  'queen': 'q',
+  'pawn': 'p', 'pawns': 'p', 'pond': 'p', 'phone': 'p',
+  'knight': 'n', 'night': 'n', 'horse': 'n', 'knife': 'n', 'nights': 'n', 'nite': 'n',
+  'bishop': 'b', 'bishops': 'b',
+  'rook': 'r', 'rooks': 'r', 'castle': 'r',
+  'queen': 'q', 'queens': 'q',
   'king': 'k'
 };
 
@@ -427,12 +427,21 @@ const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
 const RANKS = ['1', '2', '3', '4', '5', '6', '7', '8'];
 
 function normalizeSquare(word) {
+  // word must be exactly 2 chars (e.g. "e4") OR a known word prefix + digit
   word = word.toLowerCase().replace(/[-\s]/g, '');
-  if (FILES.includes(word[0]) && RANKS.includes(word[1])) return word.substring(0, 2);
-  for (const [key, file] of Object.entries(WORD_TO_FILE)) {
-    if (word.startsWith(key)) {
-      const rest = word.substring(key.length).trim();
-      if (RANKS.includes(rest)) return file + rest;
+
+  // Direct match: exactly "e4", "d2" etc — must be exactly 2 chars
+  if (word.length === 2 && FILES.includes(word[0]) && RANKS.includes(word[1]))
+    return word;
+
+  // Word prefix match: "echo4", "delta2" etc — word must be longer than 1 char
+  // (single-letter words like "d" alone are NOT squares — they need a digit attached)
+  if (word.length > 1) {
+    for (const [key, file] of Object.entries(WORD_TO_FILE)) {
+      if (word.startsWith(key)) {
+        const rest = word.substring(key.length).trim();
+        if (RANKS.includes(rest)) return file + rest;
+      }
     }
   }
   return null;
@@ -448,14 +457,27 @@ function parseVoiceMove(text) {
     if (PIECE_WORDS[w] && ['q', 'r', 'b', 'n'].includes(PIECE_WORDS[w])) promotion = PIECE_WORDS[w];
 
   for (let i = 0; i < words.length; i++) {
+    // Skip pure piece words and filler words — they are not squares
+    if (PIECE_WORDS[words[i]] || ['to', 'from', 'the', 'my', 'a'].includes(words[i])) continue;
+
+    // Try single word first (e.g. "e4", "d4")
     const sq = normalizeSquare(words[i]);
-    if (sq) { squares.push(sq); continue; }
+    if (sq) {
+      if (!squares.includes(sq)) squares.push(sq); // deduplicate
+      continue;
+    }
+
+    // Try joining with next word (e.g. "echo" + "4" → "e4")
     if (i + 1 < words.length) {
       const sq2 = normalizeSquare(words[i] + words[i + 1]);
-      if (sq2) { squares.push(sq2); i++; continue; }
+      if (sq2) {
+        if (!squares.includes(sq2)) squares.push(sq2);
+        i++; continue;
+      }
     }
   }
 
+  // Two explicit squares: "e2 to e4" or "e2 e4"
   if (squares.length >= 2) return { from: squares[0], to: squares[1], promotion };
 
   if (text.includes('castle kingside') || text.includes('king side') || text.includes('short castle'))
@@ -463,6 +485,7 @@ function parseVoiceMove(text) {
   if (text.includes('castle queenside') || text.includes('queen side') || text.includes('long castle'))
     return { special: 'castle-queenside' };
 
+  // One square: "pawn to e4", "knight d4"
   if (squares.length === 1) {
     let pieceType = null;
     for (const w of words) if (PIECE_WORDS[w]) { pieceType = PIECE_WORDS[w]; break; }
@@ -476,6 +499,15 @@ function processVoiceCommand(text, alternatives) {
   if (chess.turn() !== 'w') { setMessage("It's not White's turn."); return; }
 
   const toTry = (alternatives && alternatives.length > 1) ? alternatives : [text];
+
+  // Sort: put transcripts that contain a piece word first
+  toTry.sort((a, b) => {
+    const aHasPiece = a.toLowerCase().split(/\s+/).some(w => PIECE_WORDS[w]);
+    const bHasPiece = b.toLowerCase().split(/\s+/).some(w => PIECE_WORDS[w]);
+    if (aHasPiece && !bHasPiece) return -1;
+    if (!aHasPiece && bHasPiece) return 1;
+    return 0;
+  });
 
   for (const transcript of toTry) {
     const parsed = parseVoiceMove(transcript);
@@ -500,8 +532,38 @@ function processVoiceCommand(text, alternatives) {
     }
 
     if (parsed.to) {
-      let candidates = chess.moves({ verbose: true }).filter(m => m.to === parsed.to);
-      if (parsed.pieceType) candidates = candidates.filter(m => m.piece === parsed.pieceType);
+      // Get all legal moves to this square, verified against actual board state
+      let allToSquare = chess.moves({ verbose: true })
+        .filter(m => m.to === parsed.to)
+        .filter(m => {
+          const p = chess.get(m.from);
+          return p && p.type === m.piece && p.color === chess.turn();
+        });
+
+      // Deduplicate by from+piece (promotion variants appear 4x)
+      const seen = new Set();
+      allToSquare = allToSquare.filter(m => {
+        const key = m.from + m.piece;
+        if (seen.has(key)) return false;
+        seen.add(key); return true;
+      });
+
+      let candidates = allToSquare;
+
+      // Apply piece type filter if we know what piece was said
+      if (parsed.pieceType) {
+        candidates = allToSquare.filter(m => m.piece === parsed.pieceType);
+      } else {
+        // No piece word heard — check if all candidates are the same piece type
+        // If so, use them (e.g. 2 knights both going to d4, no pawn)
+        const pieceTypes = [...new Set(allToSquare.map(m => m.piece))];
+        if (pieceTypes.length > 1) {
+          // Mixed pieces: remove pawns as they are unlikely to be intended
+          // when user says just a square (pawns are said without piece name)
+          const nonPawn = allToSquare.filter(m => m.piece !== 'p');
+          if (nonPawn.length > 0) candidates = nonPawn;
+        }
+      }
 
       if (candidates.length === 1) {
         const m = candidates[0];
@@ -511,8 +573,12 @@ function processVoiceCommand(text, alternatives) {
           setMessage(msg); speak(msg); return;
         }
       } else if (candidates.length > 1) {
-        const msg = `Which piece? From ${candidates.map(m => m.from).join(' or ')}?`;
+        const pName = { p: 'Pawn', n: 'Knight', b: 'Bishop', r: 'Rook', q: 'Queen', k: 'King' }[candidates[0].piece] || 'piece';
+        const fromList = candidates.map(m => m.from).join(' or ');
+        const msg = `Which ${pName}? From ${fromList}?`;
         setMessage(msg); speak(msg); return;
+      } else {
+        continue;
       }
     }
   }
