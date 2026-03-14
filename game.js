@@ -556,7 +556,109 @@ function parseVoiceMove(text) {
 }
 
 
+// ─── VOICE HISTORY NAVIGATION ───────────────────────────────
+// Returns true if the text was a navigation command (so caller can skip move parsing)
+function tryVoiceNavigation(text) {
+  const t = text.toLowerCase().replace(/[.,!?]/g, '');
+
+  // ── "go back N moves" / "back N" / "rewind N" ────────────
+  const backMatch = t.match(/(?:go\s+)?(?:back|rewind|undo|previous|prev)\s+(\w+)\s*(?:move|moves|step|steps)?/)
+    || t.match(/(\w+)\s+(?:move|moves|step|steps)?\s*(?:back|ago)/);
+  if (backMatch) {
+    const n = wordToNumber(backMatch[1]);
+    if (n !== null && n > 0) {
+      const target = (viewingIndex === -1 ? moveHistory.length - 1 : viewingIndex) - n;
+      const clamped = Math.max(0, target);
+      jumpToMove(clamped);
+      const msg = `Went back ${n} move${n > 1 ? 's' : ''}.`;
+      setMessage(msg); speak(msg); return true;
+    }
+  }
+
+  // ── "go back" / "back" / "previous move" (1 step) ────────
+  if (/^(?:go\s+)?(?:back|rewind|previous\s+move|prev\s+move|one\s+back|step\s+back)$/.test(t)) {
+    const cur = viewingIndex === -1 ? moveHistory.length - 1 : viewingIndex;
+    if (cur > 0) { jumpToMove(cur - 1); setMessage("One move back."); speak("One move back."); }
+    else { setMessage("Already at the beginning."); speak("Already at the beginning."); }
+    return true;
+  }
+
+  // ── "go forward" / "next move" / "forward N" ─────────────
+  const fwdMatch = t.match(/(?:go\s+)?(?:forward|next)\s+(\w+)\s*(?:move|moves|step|steps)?/);
+  if (fwdMatch) {
+    const n = wordToNumber(fwdMatch[1]);
+    if (n !== null && n > 0) {
+      const target = (viewingIndex === -1 ? moveHistory.length - 1 : viewingIndex) + n;
+      const clamped = Math.min(moveHistory.length - 1, target);
+      if (viewingIndex === -1) { setMessage("Already at the latest move."); speak("Already at latest."); }
+      else { jumpToMove(clamped); const msg = `Went forward ${n} move${n > 1 ? 's' : ''}.`; setMessage(msg); speak(msg); }
+      return true;
+    }
+  }
+
+  if (/^(?:go\s+)?(?:forward|next\s+move|one\s+forward|step\s+forward)$/.test(t)) {
+    if (viewingIndex === -1) { setMessage("Already at the latest move."); speak("Already at latest move."); }
+    else {
+      const next = viewingIndex + 1;
+      if (next >= moveHistory.length) returnToLive();
+      else jumpToMove(next);
+      setMessage("One move forward."); speak("One move forward.");
+    }
+    return true;
+  }
+
+  // ── "show move 10" / "go to move 10" / "move 10" ─────────
+  const showMatch = t.match(/(?:show(?:\s+me)?|go\s+to|jump\s+to)?\s*move\s+(\w+)/)
+    || t.match(/^(\w+)(?:st|nd|rd|th)?\s+move$/);
+  if (showMatch) {
+    const n = wordToNumber(showMatch[1]);
+    if (n !== null && n >= 1) {
+      // Move N = index (N*2 - 2) for white, or nearby — find closest half-move index
+      const halfMoveIdx = (n - 1) * 2;  // white's move N is index (N-1)*2
+      const clamped = Math.min(moveHistory.length - 1, halfMoveIdx);
+      jumpToMove(clamped);
+      const msg = `Showing move ${n}.`;
+      setMessage(msg); speak(msg); return true;
+    }
+  }
+
+  // ── "first move" / "beginning" / "start" ─────────────────
+  if (/(?:first\s+move|beginning|start\s+over|go\s+to\s+start|go\s+to\s+beginning)/.test(t)) {
+    if (moveHistory.length > 0) { jumpToMove(0); setMessage("At the first move."); speak("At the first move."); }
+    else { setMessage("No moves yet."); speak("No moves yet."); }
+    return true;
+  }
+
+  // ── "last move" / "latest" / "return to live" / "live" ───
+  if (/(?:last\s+move|latest|return\s+to\s+live|go\s+live|resume|current\s+position)/.test(t)) {
+    returnToLive(); return true;
+  }
+
+  return false; // not a navigation command
+}
+
+// Convert number words AND digits to integer
+function wordToNumber(word) {
+  if (!word) return null;
+  const num = parseInt(word, 10);
+  if (!isNaN(num)) return num;
+  const MAP = {
+    'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
+    'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10,
+    'eleven': 11, 'twelve': 12, 'thirteen': 13, 'fourteen': 14, 'fifteen': 15,
+    'sixteen': 16, 'seventeen': 17, 'eighteen': 18, 'nineteen': 19, 'twenty': 20,
+    'a': 1, 'an': 1, 'the': null
+  };
+  return MAP[word.toLowerCase()] ?? null;
+}
+
 function processVoiceCommand(text, alternatives) {
+  // ── Check navigation commands first (work regardless of turn) ──
+  const allTexts = alternatives && alternatives.length > 1 ? [text, ...alternatives] : [text];
+  for (const t of allTexts) {
+    if (tryVoiceNavigation(t)) return;
+  }
+
   if (chess.turn() !== 'w') { setMessage("It's not White's turn."); return; }
 
   const toTry = (alternatives && alternatives.length > 1) ? alternatives : [text];
