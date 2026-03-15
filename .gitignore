@@ -1,0 +1,33 @@
+# ── Dependencies ──────────────────────────────────────────────
+node_modules/
+
+# ── Environment variables (contains API keys — NEVER commit) ──
+.env
+.env.local
+.env.development
+.env.production
+
+# ── Logs ──────────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+
+# ── OS files ──────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Editor/IDE ────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# ── Build output ──────────────────────────────────────────────
+dist/
+build/
+
+# ── Package lock (optional — remove this line if you want to commit it) ──
+package-lock.json

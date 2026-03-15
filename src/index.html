@@ -9,6 +9,8 @@
     href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap"
     rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♚</text></svg>">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
 </head>
 
@@ -60,6 +62,21 @@
           &#8250;</button>
         <button class="rewind-live" onclick="returnToLive()">&#9654; Return to Live</button>
       </div>
+
+      <!-- Opening demo banner -->
+      <div id="opening-banner" style="display:none">
+        <div class="opening-banner-left">
+          <span class="opening-icon">♟</span>
+          <div id="opening-loading" style="display:none" class="opening-loading-dots">
+            <span></span><span></span><span></span>
+            <span style="margin-left:6px">Identifying opening…</span>
+          </div>
+          <span id="opening-name" style="display:none"></span>
+        </div>
+        <button id="opening-return-btn" class="opening-return" style="display:none" onclick="returnToGame()">
+          &#9654; Return to My Game
+        </button>
+      </div>
     </div>
 
     <!-- RIGHT: Voice + History -->
@@ -79,7 +96,8 @@
         </div>
         <div class="voice-tips">
           Move: <span>"pawn to e4"</span> · <span>"knight to f3"</span> · <span>"castle kingside"</span><br>
-          Navigate: <span>"go back 3 moves"</span> · <span>"show move 10"</span> · <span>"return to live"</span>
+          Navigate: <span>"go back 3 moves"</span> · <span>"show move 10"</span> · <span>"return to live"</span><br>
+          Opening: <span>"which opening is this?"</span> · <span>"show me this opening"</span>
         </div>
       </div>
 

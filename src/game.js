@@ -36,6 +36,7 @@ let isMuted = false;
 let isListening = false;
 let dragSrc = null;
 let lastAmbiguity = null;  // { pieceType, to } — remembers last ambiguous move for follow-up
+let openingSnapshot = null; // saved game state while showing opening demo
 
 // ─── BUILD BOARD (once on load) ──────────────────────────────
 function buildBoard() {
@@ -556,10 +557,254 @@ function parseVoiceMove(text) {
 }
 
 
+// ─── OPENING DETECTION ───────────────────────────────────────
+
+async function detectAndShowOpening() {
+  if (moveHistory.length === 0) {
+    setMessage("Play some moves first, then ask which opening this is.");
+    speak("Play some moves first.");
+    return;
+  }
+
+  setMessage("Analyzing opening…");
+  speak("Analyzing opening.");
+  showOpeningBanner('loading');
+
+  // Build a compact move list for Gemini
+  const moves = moveHistory.map((m, i) => {
+    const num = Math.floor(i / 2) + 1;
+    return i % 2 === 0 ? `${num}.${m.san}` : m.san;
+  }).join(' ');
+
+  const fen = chess.fen();
+
+  // Extract White's moves only (indices 0, 2, 4, 6...) from first 6 full moves
+  const whiteMoves = moveHistory
+    .filter((_, i) => i % 2 === 0)
+    .slice(0, 6)
+    .map((m, i) => `${i + 1}.${m.san}`)
+    .join(' ');
+
+  // First 6 full moves for context
+  const earlyMoves = moveHistory.slice(0, 12).map((m, i) => {
+    const num = Math.floor(i / 2) + 1;
+    return i % 2 === 0 ? `${num}.${m.san}` : m.san;
+  }).join(' ');
+
+  const prompt = `You are a chess opening expert. I need you to identify what opening WHITE is playing.
+
+White's moves (focus ONLY on these): ${whiteMoves}
+Full game for context: ${earlyMoves}
+
+CRITICAL RULES:
+- Identify the opening from WHITE's point of view ONLY
+- The opening name describes what WHITE is doing, not Black
+- Examples:
+  * White plays 1.e4 → it's an "e4 opening" (King's Pawn)
+  * White plays 1.d4 Nf3 c4 → English/Queen's Pawn system
+  * White plays 1.e4 and then Nf3 Bc4 → Italian Game (regardless of what Black plays)
+  * White plays 1.e4 then d4 → Center Game
+  * Caro-Kann is BLACK's opening response, NEVER name it as White's opening
+  * Sicilian is BLACK's response, NEVER name it as White's opening
+- Name the opening by what WHITE is building: Italian, Ruy Lopez, King's Gambit, London System, Queen's Gambit, English, Catalan, etc.
+- Be specific with the variation name
+
+Respond with ONLY valid JSON, no markdown, no explanation:
+{
+  "name": "Opening Name from White's perspective",
+  "moves": ["e4", "e5", "Nf3", "Nc6", "Bc4", "Bc5"]
+}
+
+The "moves" array = canonical first 5-6 moves of this opening (both colors) in SAN notation.
+Return ONLY the JSON object, nothing else.`;
+
+  try {
+    const response = await fetch('/api/gemini', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      // Show the actual server error so we can debug
+      const errMsg = data.error || 'Server error';
+      // Rate limit — give friendly message
+      if (errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('Too Many')) {
+        hideOpeningBanner();
+        setMessage("Gemini rate limit hit. Wait 60 seconds and try again.");
+        speak("Rate limit hit. Please wait a moment.");
+        return;
+      }
+      throw new Error(errMsg);
+    }
+
+    // Parse JSON from Gemini response
+    let parsed;
+    try {
+      const clean = data.text.replace(/```json|```/g, '').trim();
+      parsed = JSON.parse(clean);
+    } catch {
+      throw new Error('Could not parse opening data: ' + data.text?.substring(0, 100));
+    }
+
+    const { name, moves: openingMoves } = parsed;
+    if (!name || !openingMoves || !Array.isArray(openingMoves)) throw new Error('Invalid response format');
+
+    // Save current game state before demo
+    openingSnapshot = {
+      fen: chess.fen(),
+      moveHistory: [...moveHistory],
+      fenHistory: [...fenHistory],
+      lastMove: lastMove ? { ...lastMove } : null,
+      viewingIndex: viewingIndex
+    };
+
+    // Ensure we have moves to show — pad or trim to exactly 6
+    const movesToShow = openingMoves.slice(0, 6);
+    if (movesToShow.length === 0) throw new Error('No moves returned');
+
+    // Show the opening name in banner
+    showOpeningBanner('demo', name);
+    speak(`${name}`);
+
+    // Reset board to starting position for demo
+    chess = new Chess();
+    lastMove = null;
+    selectedSq = null;
+    legalMoves = [];
+    viewingIndex = -1;
+    updateBoard();
+
+    // Small pause so user sees the reset before moves start
+    await new Promise(r => setTimeout(r, 600));
+    if (!openingSnapshot) return; // user cancelled during pause
+
+    setMessage(`"${name}" — watching ${movesToShow.length} moves.`);
+
+    // Helper: speak and wait until speech finishes before resolving
+    function speakAndWait(text) {
+      return new Promise(resolve => {
+        if (isMuted) { resolve(); return; }
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.rate = 1.1;
+        u.onend = () => resolve();
+        // Fallback in case onend never fires (some browsers)
+        setTimeout(resolve, 3000);
+        window.speechSynthesis.speak(u);
+      });
+    }
+
+    // Play moves one by one — speak first, then make the move, then pause
+    for (let i = 0; i < movesToShow.length; i++) {
+      if (!openingSnapshot) return; // user hit "Return to My Game"
+
+      const san = movesToShow[i];
+      const moveNum = Math.floor(i / 2) + 1;
+      const color = i % 2 === 0 ? 'White' : 'Black';
+
+      // 1. Announce the move first
+      const bannerName = document.getElementById('opening-name');
+      if (bannerName) {
+        bannerName.textContent = `${name}  ·  Move ${moveNum}: ${color} plays ${san}`;
+      }
+      setMessage(`Move ${moveNum}: ${color} plays ${san}`);
+
+      // 2. Wait for speech to finish
+      await speakAndWait(`${color} plays ${san}`);
+      if (!openingSnapshot) return;
+
+      // 3. Now make the move on the board
+      try {
+        const result = chess.move(san);
+        if (result) {
+          lastMove = { from: result.from, to: result.to };
+          updateBoard();
+        }
+      } catch (_) { }
+
+      // 4. Short pause after the move so user can see it before next announcement
+      if (i < movesToShow.length - 1) {
+        await new Promise(r => setTimeout(r, 800));
+      }
+    }
+
+    // All moves played — final state
+    if (openingSnapshot) {
+      const bannerName = document.getElementById('opening-name');
+      if (bannerName) bannerName.textContent = name;
+      setMessage(`"${name}" — ${movesToShow.length} moves shown. Click ▶ Return to My Game when ready.`);
+      speak("Opening complete. Click return to my game when ready.");
+    }
+
+  } catch (err) {
+    hideOpeningBanner();
+    setMessage(`Couldn't detect opening. Try again.`);
+    speak("Couldn't detect the opening.");
+  }
+}
+
+function returnToGame() {
+  if (!openingSnapshot) return;
+
+  // Restore the saved game state
+  chess = new Chess(openingSnapshot.fen);
+  moveHistory = openingSnapshot.moveHistory;
+  fenHistory = openingSnapshot.fenHistory;
+  lastMove = openingSnapshot.lastMove;
+  viewingIndex = openingSnapshot.viewingIndex;
+  openingSnapshot = null;
+
+  selectedSq = null;
+  legalMoves = [];
+
+  hideOpeningBanner();
+  updateBoard();
+  updateHistory(true);
+  setMessage("Back to your game.");
+  speak("Back to your game.");
+}
+
+function showOpeningBanner(state, name) {
+  const banner = document.getElementById('opening-banner');
+  const nameEl = document.getElementById('opening-name');
+  const loadEl = document.getElementById('opening-loading');
+  const returnBtn = document.getElementById('opening-return-btn');
+
+  if (state === 'loading') {
+    banner.style.display = 'flex';
+    nameEl.style.display = 'none';
+    loadEl.style.display = 'flex';
+    returnBtn.style.display = 'none';
+  } else {
+    banner.style.display = 'flex';
+    nameEl.textContent = name;
+    nameEl.style.display = 'block';
+    loadEl.style.display = 'none';
+    returnBtn.style.display = 'inline-flex';
+  }
+}
+
+function hideOpeningBanner() {
+  document.getElementById('opening-banner').style.display = 'none';
+}
+
 // ─── VOICE HISTORY NAVIGATION ───────────────────────────────
 // Returns true if the text was a navigation command (so caller can skip move parsing)
 function tryVoiceNavigation(text) {
   const t = text.toLowerCase().replace(/[.,!?]/g, '');
+
+  // ── Opening detection ─────────────────────────────────────
+  if (/(?:which|what|show me|identify|name|tell me).*opening|show.*opening|opening.*this|what opening/.test(t)) {
+    detectAndShowOpening(); return true;
+  }
+
+  // ── Return to game ────────────────────────────────────────
+  if (/return to (?:my )?game|back to (?:my )?game|exit opening|close opening/.test(t)) {
+    if (openingSnapshot) { returnToGame(); return true; }
+  }
 
   // ── "go back N moves" / "back N" / "rewind N" ────────────
   const backMatch = t.match(/(?:go\s+)?(?:back|rewind|undo|previous|prev)\s+(\w+)\s*(?:move|moves|step|steps)?/)
