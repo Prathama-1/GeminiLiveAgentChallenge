@@ -1,177 +1,164 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Checkmate Voice</title>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Mono:wght@400;500&display=swap"
-    rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
-  <link rel="icon"
-    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♚</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♚</text></svg>">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
   <script src="stockfish.js"></script>
 </head>
-
 <body>
 
-  <!-- Difficulty Tab + Panel -->
-  <div id="diff-tab" onclick="toggleDiffPanel()" title="Difficulty">
-    <span class="diff-tab-icon">⚔</span>
-    <span class="diff-tab-label">Difficulty</span>
+<!-- Difficulty Tab + Panel -->
+<div id="diff-tab" onclick="toggleDiffPanel()" title="Difficulty">
+  <span class="diff-tab-icon">⚔</span>
+  <span class="diff-tab-label">Difficulty</span>
+</div>
+
+<div id="diff-panel">
+  <div class="diff-panel-header">
+    <span class="diff-panel-title">Engine Level</span>
+    <button class="diff-close" onclick="toggleDiffPanel()">✕</button>
+  </div>
+  <div class="diff-options">
+    <button class="diff-option" data-level="easy" onclick="setDifficulty('easy')">
+      <div class="diff-option-icon">🌱</div>
+      <div class="diff-option-info">
+        <div class="diff-option-name">Easy</div>
+        <div class="diff-option-desc">Stockfish depth 3 · Beginner friendly</div>
+      </div>
+      <div class="diff-option-check">✓</div>
+    </button>
+    <button class="diff-option" data-level="medium" onclick="setDifficulty('medium')">
+      <div class="diff-option-icon">⚡</div>
+      <div class="diff-option-info">
+        <div class="diff-option-name">Medium</div>
+        <div class="diff-option-desc">Stockfish depth 8 · Club player</div>
+      </div>
+      <div class="diff-option-check">✓</div>
+    </button>
+    <button class="diff-option active" data-level="hard" onclick="setDifficulty('hard')">
+      <div class="diff-option-icon">💀</div>
+      <div class="diff-option-info">
+        <div class="diff-option-name">Hard</div>
+        <div class="diff-option-desc">Stockfish depth 15 · Tournament strength</div>
+      </div>
+      <div class="diff-option-check">✓</div>
+    </button>
+    <button class="diff-option" data-level="random" onclick="setDifficulty('random')">
+      <div class="diff-option-icon">🎲</div>
+      <div class="diff-option-info">
+        <div class="diff-option-name">Random</div>
+        <div class="diff-option-desc">Pure random legal moves</div>
+      </div>
+      <div class="diff-option-check">✓</div>
+    </button>
+  </div>
+  <div class="diff-current">
+    Current: <span id="diff-current-label">Hard</span>
+  </div>
+</div>
+
+<!-- Backdrop to close panel -->
+<div id="diff-backdrop" onclick="toggleDiffPanel()"></div>
+
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">♚</div>
+    <h1>Checkmate <span>Voice</span></h1>
+  </div>
+  <div class="header-controls">
+    <button class="btn-icon" id="mute-btn" title="Toggle sound">🔊</button>
+    <button class="btn" onclick="resetGame()">↺ Reset</button>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT: Board -->
+  <div class="board-col">
+    <div class="board-wrapper">
+      <div class="board-with-coords">
+        <div class="coords-rank" id="rank-coords"></div>
+        <div class="board-container">
+          <div id="board-flash"></div>
+          <div id="board"></div>
+
+        </div>
+      </div>
+      <div class="coords-row" id="file-coords"></div>
+    </div>
+
+    <div class="status-bar">
+      <div class="turn-indicator">
+        <div class="turn-dot white" id="turn-dot"></div>
+        <span id="turn-label">White's Turn</span>
+      </div>
+      <span id="check-label">CHECK</span>
+      <div id="diff-badge"><div class="badge-dot"></div><span id="diff-badge-label">Hard</span></div>
+    </div>
+
+    <div id="rewind-banner" style="display:none">
+      <span class="rewind-icon">⏪</span>
+      <span id="rewind-label">Viewing past move</span>
+      <div style="flex:1"></div>
+      <button class="rewind-nav" onclick="jumpToMove(Math.max(0, viewingIndex - 1))">&#8249; Prev</button>
+      <button class="rewind-nav" onclick="jumpToMove(Math.min(moveHistory.length - 1, viewingIndex + 1))">Next &#8250;</button>
+      <button class="rewind-live" onclick="returnToLive()">&#9654; Return to Live</button>
+    </div>
+
+    <!-- Opening demo banner -->
+    <div id="opening-banner" style="display:none">
+      <div class="opening-banner-left">
+        <div id="opening-loading" style="display:none" class="opening-loading-inline">
+          <div class="opening-spinner"></div>
+          <span>Analyzing opening…</span>
+        </div>
+        <span id="opening-name" style="display:none"></span>
+      </div>
+      <button id="opening-return-btn" class="opening-return" style="display:none" onclick="returnToGame()">
+        &#9654; Return to My Game
+      </button>
+    </div>
   </div>
 
-  <div id="diff-panel">
-    <div class="diff-panel-header">
-      <span class="diff-panel-title">Engine Level</span>
-      <button class="diff-close" onclick="toggleDiffPanel()">✕</button>
+  <!-- RIGHT: Voice + History -->
+  <div class="right-col">
+    <div class="voice-panel">
+      <div class="panel-label">
+        <div class="dot-live"></div>
+        Voice Assistant — White Only
+      </div>
+      <div id="assistant-msg">"Welcome! Say something like — pawn to e4."</div>
+      <div class="voice-controls">
+        <button id="mic-btn">🎤 Hold to Speak</button>
+      </div>
+      <div class="processing-dots" id="processing">
+        <span></span><span></span><span></span>
+        <span style="margin-left:4px">Processing…</span>
+      </div>
+      <div class="voice-tips">
+        Move: <span>"pawn to e4"</span> · <span>"knight to f3"</span> · <span>"castle kingside"</span><br>
+        Navigate: <span>"go back 3 moves"</span> · <span>"show move 10"</span> · <span>"return to live"</span><br>
+        Opening: <span>"which opening is this?"</span> · <span>"show me this opening"</span>
+      </div>
     </div>
-    <div class="diff-options">
-      <button class="diff-option" data-level="easy" onclick="setDifficulty('easy')">
-        <div class="diff-option-icon">🌱</div>
-        <div class="diff-option-info">
-          <div class="diff-option-name">Easy</div>
-          <div class="diff-option-desc">Stockfish depth 3 · Beginner friendly</div>
-        </div>
-        <div class="diff-option-check">✓</div>
-      </button>
-      <button class="diff-option" data-level="medium" onclick="setDifficulty('medium')">
-        <div class="diff-option-icon">⚡</div>
-        <div class="diff-option-info">
-          <div class="diff-option-name">Medium</div>
-          <div class="diff-option-desc">Stockfish depth 8 · Club player</div>
-        </div>
-        <div class="diff-option-check">✓</div>
-      </button>
-      <button class="diff-option active" data-level="hard" onclick="setDifficulty('hard')">
-        <div class="diff-option-icon">💀</div>
-        <div class="diff-option-info">
-          <div class="diff-option-name">Hard</div>
-          <div class="diff-option-desc">Stockfish depth 15 · Tournament strength</div>
-        </div>
-        <div class="diff-option-check">✓</div>
-      </button>
-      <button class="diff-option" data-level="random" onclick="setDifficulty('random')">
-        <div class="diff-option-icon">🎲</div>
-        <div class="diff-option-info">
-          <div class="diff-option-name">Random</div>
-          <div class="diff-option-desc">Pure random legal moves</div>
-        </div>
-        <div class="diff-option-check">✓</div>
-      </button>
-    </div>
-    <div class="diff-current">
-      Current: <span id="diff-current-label">Hard</span>
+
+    <div class="history-panel">
+      <div class="history-header">
+        <span>Move History</span>
+        <span id="move-count" style="color:var(--text-dim)">0 moves</span>
+      </div>
+      <div id="history-list">
+        <div class="empty-history">No moves yet.<br>White to move.</div>
+      </div>
     </div>
   </div>
+</main>
 
-  <!-- Backdrop to close panel -->
-  <div id="diff-backdrop" onclick="toggleDiffPanel()"></div>
-
-
-  <header>
-    <div class="logo">
-      <div class="logo-icon">♚</div>
-      <h1>Checkmate <span>Voice</span></h1>
-    </div>
-    <div class="header-controls">
-      <button class="btn-icon" id="mute-btn" title="Toggle sound">🔊</button>
-      <button class="btn" onclick="resetGame()">↺ Reset</button>
-    </div>
-  </header>
-
-  <main>
-    <!-- LEFT: Board -->
-    <div class="board-col">
-      <div class="board-wrapper">
-        <div class="board-with-coords">
-          <div class="coords-rank" id="rank-coords"></div>
-          <div class="board-container">
-            <div id="board"></div>
-            <div id="gameover-overlay">
-              <div id="gameover-title">Checkmate</div>
-              <div id="gameover-sub">White wins the game.</div>
-              <button class="btn" onclick="resetGame()">Play Again</button>
-            </div>
-          </div>
-        </div>
-        <div class="coords-row" id="file-coords"></div>
-      </div>
-
-      <div class="status-bar">
-        <div class="turn-indicator">
-          <div class="turn-dot white" id="turn-dot"></div>
-          <span id="turn-label">White's Turn</span>
-        </div>
-        <span id="check-label">CHECK</span>
-        <div id="diff-badge">
-          <div class="badge-dot"></div><span id="diff-badge-label">Hard</span>
-        </div>
-      </div>
-
-      <div id="rewind-banner" style="display:none">
-        <span class="rewind-icon">⏪</span>
-        <span id="rewind-label">Viewing past move</span>
-        <div style="flex:1"></div>
-        <button class="rewind-nav" onclick="jumpToMove(Math.max(0, viewingIndex - 1))">&#8249; Prev</button>
-        <button class="rewind-nav" onclick="jumpToMove(Math.min(moveHistory.length - 1, viewingIndex + 1))">Next
-          &#8250;</button>
-        <button class="rewind-live" onclick="returnToLive()">&#9654; Return to Live</button>
-      </div>
-
-      <!-- Opening demo banner -->
-      <div id="opening-banner" style="display:none">
-        <div class="opening-banner-left">
-          <span class="opening-icon">♟</span>
-          <div id="opening-loading" style="display:none" class="opening-loading-dots">
-            <span></span><span></span><span></span>
-            <span style="margin-left:6px">Identifying opening…</span>
-          </div>
-          <span id="opening-name" style="display:none"></span>
-        </div>
-        <button id="opening-return-btn" class="opening-return" style="display:none" onclick="returnToGame()">
-          &#9654; Return to My Game
-        </button>
-      </div>
-    </div>
-
-    <!-- RIGHT: Voice + History -->
-    <div class="right-col">
-      <div class="voice-panel">
-        <div class="panel-label">
-          <div class="dot-live"></div>
-          Voice Assistant — White Only
-        </div>
-        <div id="assistant-msg">"Welcome! Say something like — pawn to e4."</div>
-        <div class="voice-controls">
-          <button id="mic-btn">🎤 Hold to Speak</button>
-        </div>
-        <div class="processing-dots" id="processing">
-          <span></span><span></span><span></span>
-          <span style="margin-left:4px">Processing…</span>
-        </div>
-        <div class="voice-tips">
-          Move: <span>"pawn to e4"</span> · <span>"knight to f3"</span> · <span>"castle kingside"</span><br>
-          Navigate: <span>"go back 3 moves"</span> · <span>"show move 10"</span> · <span>"return to live"</span><br>
-          Opening: <span>"which opening is this?"</span> · <span>"show me this opening"</span>
-        </div>
-      </div>
-
-      <div class="history-panel">
-        <div class="history-header">
-          <span>Move History</span>
-          <span id="move-count" style="color:var(--text-dim)">0 moves</span>
-        </div>
-        <div id="history-list">
-          <div class="empty-history">No moves yet.<br>White to move.</div>
-        </div>
-      </div>
-    </div>
-  </main>
-
-  <script src="game.js"></script>
+<script src="game.js"></script>
 </body>
-
 </html>

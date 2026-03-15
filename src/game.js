@@ -25,26 +25,26 @@ function pieceKey(piece) {
 }
 
 // ─── GAME STATE ───────────────────────────────────────────────
-let chess = new Chess();
-let selectedSq = null;
-let legalMoves = [];
-let lastMove = null;
-let moveHistory = [];   // { san, color, from, to }
-let fenHistory = [];   // FEN after each move
+let chess        = new Chess();
+let selectedSq   = null;
+let legalMoves   = [];
+let lastMove     = null;
+let moveHistory  = [];   // { san, color, from, to }
+let fenHistory   = [];   // FEN after each move
 let viewingIndex = -1;   // -1 = live; 0..N = past move
-let isMuted = false;
-let isListening = false;
-let dragSrc = null;
-let lastAmbiguity = null;  // { pieceType, to } — remembers last ambiguous move for follow-up
+let isMuted      = false;
+let isListening  = false;
+let dragSrc      = null;
+let lastAmbiguity  = null;  // { pieceType, to } — remembers last ambiguous move for follow-up
 let openingSnapshot = null; // saved game state while showing opening demo
 
 // ─── DIFFICULTY STATE ─────────────────────────────────────────
 let difficulty = 'hard';    // 'easy' | 'medium' | 'hard' | 'random'
-let stockfish = null;      // Stockfish Web Worker instance
-let sfReady = false;     // true once Stockfish sends 'uciok'
+let stockfish  = null;      // Stockfish Web Worker instance
+let sfReady    = false;     // true once Stockfish sends 'uciok'
 let sfCallback = null;      // called with bestmove when engine responds
 
-const DEPTH = { easy: 3, medium: 8, hard: 15, random: 0 };
+const DEPTH      = { easy: 3, medium: 8, hard: 15, random: 0 };
 const DIFF_NAMES = { easy: 'Easy', medium: 'Medium', hard: 'Hard', random: 'Random' };
 
 // ─── STOCKFISH ENGINE ────────────────────────────────────────
@@ -70,7 +70,7 @@ function initStockfish() {
       // Parse bestmove response: "bestmove e2e4 ponder ..."
       if (msg.startsWith('bestmove')) {
         const parts = msg.split(' ');
-        const move = parts[1];
+        const move  = parts[1];
         if (move && move !== '(none)' && sfCallback) {
           sfCallback(move);
           sfCallback = null;
@@ -84,9 +84,9 @@ function initStockfish() {
     };
 
     stockfish.postMessage('uci');
-  } catch (e) {
+  } catch(e) {
     stockfish = null;
-    sfReady = false;
+    sfReady   = false;
   }
 }
 
@@ -103,9 +103,9 @@ function getStockfishMove(fen, depth, callback) {
 
 // ─── DIFFICULTY UI ───────────────────────────────────────────
 function toggleDiffPanel() {
-  const panel = document.getElementById('diff-panel');
+  const panel    = document.getElementById('diff-panel');
   const backdrop = document.getElementById('diff-backdrop');
-  const isOpen = panel.classList.contains('open');
+  const isOpen   = panel.classList.contains('open');
   panel.classList.toggle('open', !isOpen);
   backdrop.classList.toggle('visible', !isOpen);
 }
@@ -134,10 +134,10 @@ function setDifficulty(level) {
 
 // ─── BUILD BOARD (once on load) ──────────────────────────────
 function buildBoard() {
-  const board = document.getElementById('board');
+  const board      = document.getElementById('board');
   const rankCoords = document.getElementById('rank-coords');
   const fileCoords = document.getElementById('file-coords');
-  board.innerHTML = '';
+  board.innerHTML  = '';
 
   rankCoords.innerHTML = '';
   for (let r = 8; r >= 1; r--) {
@@ -147,23 +147,23 @@ function buildBoard() {
   }
 
   fileCoords.innerHTML = '';
-  ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].forEach(f => {
+  ['a','b','c','d','e','f','g','h'].forEach(f => {
     const d = document.createElement('div');
-    d.className = 'coord-file-label';
+    d.className   = 'coord-file-label';
     d.textContent = f;
     fileCoords.appendChild(d);
   });
 
   for (let row = 0; row < 8; row++) {
     for (let col = 0; col < 8; col++) {
-      const sq = String.fromCharCode(97 + col) + (8 - row);
+      const sq  = String.fromCharCode(97 + col) + (8 - row);
       const div = document.createElement('div');
-      div.className = 'square ' + ((row + col) % 2 === 0 ? 'light' : 'dark');
+      div.className  = 'square ' + ((row + col) % 2 === 0 ? 'light' : 'dark');
       div.dataset.sq = sq;
 
       div.addEventListener('dragover', e => e.preventDefault());
-      div.addEventListener('drop', e => { e.preventDefault(); handleDrop(sq); });
-      div.addEventListener('click', () => handleSquareClick(sq));
+      div.addEventListener('drop',     e => { e.preventDefault(); handleDrop(sq); });
+      div.addEventListener('click',    () => handleSquareClick(sq));
       board.appendChild(div);
     }
   }
@@ -177,13 +177,13 @@ function updateBoard() {
     const sqName = sq.dataset.sq;
 
     sq.classList.remove(
-      'selected', 'legal-move', 'legal-capture',
-      'last-from', 'last-to', 'in-check', 'dragging'
+      'selected','legal-move','legal-capture',
+      'last-from','last-to','in-check','dragging'
     );
 
     if (lastMove) {
       if (sqName === lastMove.from) sq.classList.add('last-from');
-      if (sqName === lastMove.to) sq.classList.add('last-to');
+      if (sqName === lastMove.to)   sq.classList.add('last-to');
     }
 
     if (sqName === selectedSq) sq.classList.add('selected');
@@ -193,7 +193,7 @@ function updateBoard() {
 
     if (chess.in_check()) {
       const t = chess.turn();
-      ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].forEach(file => {
+      ['a','b','c','d','e','f','g','h'].forEach(file => {
         for (let rank = 1; rank <= 8; rank++) {
           const p = chess.get(file + rank);
           if (p && p.type === 'k' && p.color === t && (file + rank) === sqName)
@@ -206,11 +206,11 @@ function updateBoard() {
     sq.innerHTML = '';
     const piece = chess.get(sqName);
     if (piece) {
-      const span = document.createElement('span');
+      const span     = document.createElement('span');
       span.className = 'piece';
-      const img = document.createElement('img');
-      img.src = PIECE_URLS[pieceKey(piece)] || '';
-      img.draggable = false;
+      const img      = document.createElement('img');
+      img.src        = PIECE_URLS[pieceKey(piece)] || '';
+      img.draggable  = false;
       span.appendChild(img);
 
       // Drag source must be on the square (pointer-events: none on .piece)
@@ -298,16 +298,16 @@ function handleSquareClick(sq) {
 function tryMove(from, to, promotion) {
   if (viewingIndex !== -1) returnToLive();
 
-  const piece = chess.get(from);
+  const piece       = chess.get(from);
   const isPromotion = piece && piece.type === 'p' &&
     ((piece.color === 'w' && to[1] === '8') || (piece.color === 'b' && to[1] === '1'));
 
   const result = chess.move({ from, to, promotion: promotion || (isPromotion ? 'q' : undefined) });
   if (!result) { selectedSq = null; legalMoves = []; updateBoard(); return false; }
 
-  lastMove = { from: result.from, to: result.to };
+  lastMove      = { from: result.from, to: result.to };
   lastAmbiguity = null;
-  selectedSq = null; legalMoves = []; viewingIndex = -1;
+  selectedSq    = null; legalMoves = []; viewingIndex = -1;
   moveHistory.push({ san: result.san, color: result.color, from: result.from, to: result.to });
   fenHistory.push(chess.fen());
 
@@ -328,15 +328,15 @@ function blackMove() {
   const label = document.getElementById('turn-label');
   if (label) label.textContent = "Engine thinking…";
 
-  const fen = chess.fen();
+  const fen   = chess.fen();
   const depth = DEPTH[difficulty] || 3;
 
   getStockfishMove(fen, depth, (uciMove) => {
     if (!uciMove) { blackMoveRandom(); return; }
 
     // UCI move format: "e2e4" or "e7e8q" (promotion)
-    const from = uciMove.substring(0, 2);
-    const to = uciMove.substring(2, 4);
+    const from      = uciMove.substring(0, 2);
+    const to        = uciMove.substring(2, 4);
     const promotion = uciMove.length > 4 ? uciMove[4] : undefined;
 
     const result = chess.move({ from, to, promotion });
@@ -370,32 +370,74 @@ function blackMoveRandom() {
 // ─── GAME OVER ───────────────────────────────────────────────
 function checkGameOver() {
   if (!chess.game_over()) return;
-  const overlay = document.getElementById('gameover-overlay');
-  const title = document.getElementById('gameover-title');
-  const sub = document.getElementById('gameover-sub');
-  overlay.classList.add('visible');
+
+  let title, sub;
   if (chess.in_checkmate()) {
-    title.textContent = 'Checkmate';
-    sub.textContent = `${chess.turn() === 'w' ? 'Black' : 'White'} wins.`;
+    const winner = chess.turn() === 'w' ? 'Black' : 'White';
+    title = 'Checkmate';
+    sub   = `${winner} wins`;
+  } else if (chess.in_stalemate()) {
+    title = 'Stalemate';
+    sub   = 'Draw';
   } else {
-    title.textContent = 'Draw';
-    sub.textContent = chess.in_stalemate() ? 'Stalemate.' : 'Draw by repetition or 50-move rule.';
+    title = 'Draw';
+    sub   = 'Draw by repetition or 50-move rule';
   }
+
+  // Flash overlay on the board
+  const flashEl = document.getElementById('board-flash');
+  if (flashEl) {
+    flashEl.classList.remove('active');
+    void flashEl.offsetWidth; // force reflow to restart animation
+    flashEl.classList.add('active');
+    setTimeout(() => flashEl.classList.remove('active'), 1700);
+  }
+
+  // Update status bar to show result
+  const turnLabel = document.getElementById('turn-label');
+  const turnDot   = document.getElementById('turn-dot');
+  if (turnLabel) turnLabel.textContent = `${title} — ${sub}`;
+  if (turnDot)   turnDot.style.display = 'none';
+
+  // Show toast notification on the board
+  showGameOverToast(title, sub);
+
+  speak(`${title}. ${sub}.`);
+}
+
+function showGameOverToast(title, sub) {
+  // Remove any existing toast
+  const existing = document.getElementById('gameover-toast');
+  if (existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.id = 'gameover-toast';
+  toast.innerHTML = `
+    <div class="toast-title">${title}</div>
+    <div class="toast-sub">${sub}</div>
+    <button class="toast-btn" onclick="resetGame()">Play Again</button>
+  `;
+
+  // Append to body — fixed position at bottom center of viewport
+  document.body.appendChild(toast);
+
+  // Animate in
+  requestAnimationFrame(() => toast.classList.add('visible'));
 }
 
 // ─── STATUS BAR ──────────────────────────────────────────────
 function updateStatus() {
   const turn = chess.turn();
-  document.getElementById('turn-dot').className = 'turn-dot ' + (turn === 'w' ? 'white' : 'black');
+  document.getElementById('turn-dot').className   = 'turn-dot ' + (turn === 'w' ? 'white' : 'black');
   document.getElementById('turn-label').textContent = turn === 'w' ? "White's Turn" : "Black's Turn (Engine)";
   document.getElementById('check-label').classList.toggle('visible', chess.in_check());
 }
 
 // ─── HISTORY PANEL ───────────────────────────────────────────
 function updateHistory(scrollToBottom) {
-  const list = document.getElementById('history-list');
+  const list  = document.getElementById('history-list');
   const count = document.getElementById('move-count');
-  list.innerHTML = '';
+  list.innerHTML    = '';
   count.textContent = moveHistory.length + ' moves';
 
   if (!moveHistory.length) {
@@ -406,12 +448,12 @@ function updateHistory(scrollToBottom) {
   const activeIdx = viewingIndex === -1 ? moveHistory.length - 1 : viewingIndex;
 
   moveHistory.forEach((m, i) => {
-    const div = document.createElement('div');
+    const div     = document.createElement('div');
     const isWhite = m.color === 'w';
     div.className = 'history-move' + (i === activeIdx ? ' active-move' : '');
-    div.title = 'Jump to this position';
+    div.title     = 'Jump to this position';
     div.innerHTML = `
-      <span class="move-num">${isWhite ? Math.floor(i / 2) + 1 + '.' : '…'}</span>
+      <span class="move-num">${isWhite ? Math.floor(i/2)+1+'.' : '…'}</span>
       <span class="move-san ${isWhite ? 'white-move' : 'black-move'}">${m.san}</span>`;
     div.addEventListener('click', () => jumpToMove(i));
     list.appendChild(div);
@@ -434,7 +476,7 @@ function jumpToMove(index) {
   lastMove = m.from ? { from: m.from, to: m.to } : null;
   selectedSq = null; legalMoves = [];
   updateBoard(); updateHistory(); updateRewindBanner();
-  setMessage(`Viewing move ${Math.floor(index / 2) + 1}: ${m.san}`);
+  setMessage(`Viewing move ${Math.floor(index/2)+1}: ${m.san}`);
 }
 
 function returnToLive() {
@@ -455,7 +497,7 @@ function updateRewindBanner() {
   if (viewingIndex !== -1 && moveHistory.length > 0) {
     banner.style.display = 'flex';
     document.getElementById('rewind-label').textContent =
-      `Move ${Math.floor(viewingIndex / 2) + 1} of ${Math.ceil(moveHistory.length / 2)}`;
+      `Move ${Math.floor(viewingIndex/2)+1} of ${Math.ceil(moveHistory.length/2)}`;
   } else {
     banner.style.display = 'none';
   }
@@ -466,7 +508,15 @@ function resetGame() {
   chess = new Chess();
   selectedSq = null; legalMoves = []; lastMove = null;
   moveHistory = []; fenHistory = []; viewingIndex = -1; dragSrc = null; lastAmbiguity = null;
-  document.getElementById('gameover-overlay').classList.remove('visible');
+
+  // Remove game over toast if present
+  const toast = document.getElementById('gameover-toast');
+  if (toast) toast.remove();
+
+  // Reset status bar
+  const turnDot = document.getElementById('turn-dot');
+  if (turnDot) turnDot.style.display = '';
+
   setMessage("Game reset. White to move.");
   updateHistory(); updateBoard(); updateRewindBanner();
 }
@@ -480,11 +530,11 @@ function initSpeech() {
     setMessage("Use Chrome for voice support."); return;
   }
   const btn = document.getElementById('mic-btn');
-  btn.addEventListener('mousedown', startListening);
+  btn.addEventListener('mousedown',  startListening);
   btn.addEventListener('touchstart', startListening, { passive: true });
-  btn.addEventListener('mouseup', stopListening);
+  btn.addEventListener('mouseup',    stopListening);
   btn.addEventListener('mouseleave', stopListening);
-  btn.addEventListener('touchend', stopListening);
+  btn.addEventListener('touchend',   stopListening);
   btn.onclick = null;
 }
 
@@ -494,15 +544,15 @@ function startListening() {
   if (chess.turn() !== 'w') { setMessage("Voice is only for White. Wait for Black's move."); return; }
   if (chess.game_over() || isListening) return;
 
-  const recognition = new SR();
-  recognition.continuous = false;
-  recognition.lang = 'en-US';
+  const recognition          = new SR();
+  recognition.continuous     = false;
+  recognition.lang           = 'en-US';
   recognition.interimResults = false;
   recognition.maxAlternatives = 3;
 
   recognition.onstart = () => {
     isListening = true;
-    const btn = document.getElementById('mic-btn');
+    const btn   = document.getElementById('mic-btn');
     btn.classList.add('listening');
     btn.textContent = '🔴 Listening…';
     setMessage("Listening… speak now.");
@@ -529,7 +579,7 @@ function startListening() {
   try {
     recognition.start();
     window._activeRecognition = recognition;
-  } catch (err) {
+  } catch(err) {
     setMessage("Could not start mic. Try again.");
     resetMicBtn();
   }
@@ -537,44 +587,44 @@ function startListening() {
 
 function stopListening() {
   if (!isListening) return;
-  try { if (window._activeRecognition) window._activeRecognition.stop(); } catch (_) { }
+  try { if (window._activeRecognition) window._activeRecognition.stop(); } catch(_) {}
   resetMicBtn();
 }
 
 function resetMicBtn() {
   isListening = false;
-  const btn = document.getElementById('mic-btn');
+  const btn   = document.getElementById('mic-btn');
   btn.classList.remove('listening');
   btn.textContent = '🎤 Hold to Speak';
 }
 
 // ─── VOICE COMMAND PARSER ────────────────────────────────────
 const WORD_TO_FILE = {
-  'alpha': 'a', 'a': 'a',
-  'bravo': 'b', 'b': 'b',
-  'charlie': 'c', 'c': 'c', 'see': 'c', 'sea': 'c',
-  'delta': 'd', 'd': 'd', 'dee': 'd',
-  'echo': 'e', 'e': 'e', 'ee': 'e',
-  'foxtrot': 'f', 'f': 'f', 'ef': 'f',
-  'golf': 'g', 'g': 'g', 'gee': 'g',
-  'hotel': 'h', 'h': 'h', 'aitch': 'h'
+  'alpha':'a','a':'a',
+  'bravo':'b','b':'b',
+  'charlie':'c','c':'c','see':'c','sea':'c',
+  'delta':'d','d':'d','dee':'d',
+  'echo':'e','e':'e','ee':'e',
+  'foxtrot':'f','f':'f','ef':'f',
+  'golf':'g','g':'g','gee':'g',
+  'hotel':'h','h':'h','aitch':'h'
 };
 
 const PIECE_WORDS = {
-  'pawn': 'p', 'pawns': 'p', 'pond': 'p', 'phone': 'p',
-  'knight': 'n', 'night': 'n', 'horse': 'n', 'knife': 'n', 'nights': 'n', 'nite': 'n',
-  'bishop': 'b', 'bishops': 'b',
-  'rook': 'r', 'rooks': 'r', 'castle': 'r',
-  'queen': 'q', 'queens': 'q',
-  'king': 'k'
+  'pawn':'p', 'pawns':'p', 'pond':'p', 'phone':'p',
+  'knight':'n', 'night':'n', 'horse':'n', 'knife':'n', 'nights':'n', 'nite':'n',
+  'bishop':'b', 'bishops':'b',
+  'rook':'r', 'rooks':'r', 'castle':'r',
+  'queen':'q', 'queens':'q',
+  'king':'k'
 };
 
-const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
-const RANKS = ['1', '2', '3', '4', '5', '6', '7', '8'];
+const FILES = ['a','b','c','d','e','f','g','h'];
+const RANKS = ['1','2','3','4','5','6','7','8'];
 
 function normalizeSquare(word) {
   // word must be exactly 2 chars (e.g. "e4") OR a known word prefix + digit
-  word = word.toLowerCase().replace(/[-\s]/g, '');
+  word = word.toLowerCase().replace(/[-\s]/g,'');
 
   // Direct match: exactly "e4", "d2" etc — must be exactly 2 chars
   if (word.length === 2 && FILES.includes(word[0]) && RANKS.includes(word[1]))
@@ -604,7 +654,7 @@ function parseVoiceMove(text) {
   const joined = words.join(''); // e.g. "nfd4", "nfd4", "knight f d 4"
 
   let pieceType = null;
-  let fileHint = null;
+  let fileHint  = null;
   let promotion = 'q';
 
   // ── Step 2: Detect piece word from individual tokens ─────────────
@@ -618,17 +668,17 @@ function parseVoiceMove(text) {
   // Handles: "nfd4", "ned4", "bbd5", "rfe1" etc.
   // Also: "fd4" with no piece letter (browser drops the N)
   const SAN_REGEX = /^([pnbrqk])([a-h])([a-h][1-8])$/;
-  const sanMatch = joined.match(SAN_REGEX);
+  const sanMatch  = joined.match(SAN_REGEX);
   if (sanMatch) {
     pieceType = PIECE_WORDS[sanMatch[1]] || sanMatch[1];
-    fileHint = sanMatch[2];
+    fileHint  = sanMatch[2];
     return { to: sanMatch[3], pieceType, fileHint, promotion };
   }
 
   // "fd4", "ed4" — file hint + square, no piece letter (browser dropped it)
   // Return fileHint so processVoiceCommand can use lastAmbiguity context
   const FILE_SQ_REGEX = /^([a-h])([a-h][1-8])$/;
-  const fileSqMatch = joined.match(FILE_SQ_REGEX);
+  const fileSqMatch   = joined.match(FILE_SQ_REGEX);
   if (fileSqMatch) {
     return { to: fileSqMatch[2], pieceType: null, fileHint: fileSqMatch[1], promotion };
   }
@@ -649,7 +699,7 @@ function parseVoiceMove(text) {
   }
 
   // ── Step 4: Castling ─────────────────────────────────────────────
-  if (text.includes('castle kingside') || text.includes('king side') || text.includes('short castle') || joined === 'oo')
+  if (text.includes('castle kingside')  || text.includes('king side')   || text.includes('short castle') || joined === 'oo')
     return { special: 'castle-kingside' };
   if (text.includes('castle queenside') || text.includes('queen side') || text.includes('long castle') || joined === 'ooo')
     return { special: 'castle-queenside' };
@@ -661,10 +711,10 @@ function parseVoiceMove(text) {
     const w = words[i];
 
     // Skip filler and piece words
-    if (PIECE_WORDS[w] || ['to', 'from', 'the', 'my', 'a', 'at'].includes(w)) continue;
+    if (PIECE_WORDS[w] || ['to','from','the','my','a','at'].includes(w)) continue;
 
     // Bare file hint right after piece word (e.g. "knight F d4" → skip "f")
-    if (FILES.includes(w) && w.length === 1 && i > 0 && PIECE_WORDS[words[i - 1]]) {
+    if (FILES.includes(w) && w.length === 1 && i > 0 && PIECE_WORDS[words[i-1]]) {
       fileHint = w;
       continue;
     }
@@ -685,7 +735,7 @@ function parseVoiceMove(text) {
 
     // Two-word square: "echo 4" → "e4"
     if (i + 1 < words.length) {
-      const sq2 = normalizeSquare(w + words[i + 1]);
+      const sq2 = normalizeSquare(w + words[i+1]);
       if (sq2) { if (!squares.includes(sq2)) squares.push(sq2); i++; continue; }
     }
   }
@@ -799,10 +849,10 @@ Return ONLY the JSON object, nothing else.`;
 
     // Save current game state before demo
     openingSnapshot = {
-      fen: chess.fen(),
-      moveHistory: [...moveHistory],
-      fenHistory: [...fenHistory],
-      lastMove: lastMove ? { ...lastMove } : null,
+      fen:          chess.fen(),
+      moveHistory:  [...moveHistory],
+      fenHistory:   [...fenHistory],
+      lastMove:     lastMove ? { ...lastMove } : null,
       viewingIndex: viewingIndex
     };
 
@@ -815,10 +865,10 @@ Return ONLY the JSON object, nothing else.`;
     speak(`${name}`);
 
     // Reset board to starting position for demo
-    chess = new Chess();
-    lastMove = null;
-    selectedSq = null;
-    legalMoves = [];
+    chess        = new Chess();
+    lastMove     = null;
+    selectedSq   = null;
+    legalMoves   = [];
     viewingIndex = -1;
     updateBoard();
 
@@ -834,7 +884,7 @@ Return ONLY the JSON object, nothing else.`;
         if (isMuted) { resolve(); return; }
         window.speechSynthesis.cancel();
         const u = new SpeechSynthesisUtterance(text);
-        u.rate = 1.1;
+        u.rate  = 1.1;
         u.onend = () => resolve();
         // Fallback in case onend never fires (some browsers)
         setTimeout(resolve, 3000);
@@ -846,9 +896,9 @@ Return ONLY the JSON object, nothing else.`;
     for (let i = 0; i < movesToShow.length; i++) {
       if (!openingSnapshot) return; // user hit "Return to My Game"
 
-      const san = movesToShow[i];
+      const san     = movesToShow[i];
       const moveNum = Math.floor(i / 2) + 1;
-      const color = i % 2 === 0 ? 'White' : 'Black';
+      const color   = i % 2 === 0 ? 'White' : 'Black';
 
       // 1. Announce the move first
       const bannerName = document.getElementById('opening-name');
@@ -868,7 +918,7 @@ Return ONLY the JSON object, nothing else.`;
           lastMove = { from: result.from, to: result.to };
           updateBoard();
         }
-      } catch (_) { }
+      } catch (_) {}
 
       // 4. Short pause after the move so user can see it before next announcement
       if (i < movesToShow.length - 1) {
@@ -895,15 +945,15 @@ function returnToGame() {
   if (!openingSnapshot) return;
 
   // Restore the saved game state
-  chess = new Chess(openingSnapshot.fen);
-  moveHistory = openingSnapshot.moveHistory;
-  fenHistory = openingSnapshot.fenHistory;
-  lastMove = openingSnapshot.lastMove;
+  chess        = new Chess(openingSnapshot.fen);
+  moveHistory  = openingSnapshot.moveHistory;
+  fenHistory   = openingSnapshot.fenHistory;
+  lastMove     = openingSnapshot.lastMove;
   viewingIndex = openingSnapshot.viewingIndex;
   openingSnapshot = null;
 
-  selectedSq = null;
-  legalMoves = [];
+  selectedSq  = null;
+  legalMoves  = [];
 
   hideOpeningBanner();
   updateBoard();
@@ -913,21 +963,21 @@ function returnToGame() {
 }
 
 function showOpeningBanner(state, name) {
-  const banner = document.getElementById('opening-banner');
-  const nameEl = document.getElementById('opening-name');
-  const loadEl = document.getElementById('opening-loading');
+  const banner   = document.getElementById('opening-banner');
+  const nameEl   = document.getElementById('opening-name');
+  const loadEl   = document.getElementById('opening-loading');
   const returnBtn = document.getElementById('opening-return-btn');
 
   if (state === 'loading') {
-    banner.style.display = 'flex';
-    nameEl.style.display = 'none';
-    loadEl.style.display = 'flex';
+    banner.style.display  = 'flex';
+    nameEl.style.display  = 'none';
+    loadEl.style.display  = 'flex'; loadEl.style.flexDirection = 'row';
     returnBtn.style.display = 'none';
   } else {
-    banner.style.display = 'flex';
-    nameEl.textContent = name;
-    nameEl.style.display = 'block';
-    loadEl.style.display = 'none';
+    banner.style.display  = 'flex';
+    nameEl.textContent    = name;
+    nameEl.style.display  = 'block';
+    loadEl.style.display  = 'none';
     returnBtn.style.display = 'inline-flex';
   }
 }
@@ -942,10 +992,10 @@ function tryVoiceNavigation(text) {
   const t = text.toLowerCase().replace(/[.,!?]/g, '');
 
   // ── Difficulty commands ──────────────────────────────────
-  if (/easy|beginner|level\s+1/.test(t)) { setDifficulty('easy'); return true; }
+  if (/easy|beginner|level\s+1/.test(t))   { setDifficulty('easy');   return true; }
   if (/medium|intermediate|level\s+2/.test(t)) { setDifficulty('medium'); return true; }
-  if (/hard|difficult|expert|level\s+3/.test(t)) { setDifficulty('hard'); return true; }
-  if (/random/.test(t)) { setDifficulty('random'); return true; }
+  if (/hard|difficult|expert|level\s+3/.test(t)) { setDifficulty('hard');   return true; }
+  if (/random/.test(t))                    { setDifficulty('random'); return true; }
 
   // ── Opening detection ─────────────────────────────────────
   if (/(?:which|what|show me|identify|name|tell me).*opening|show.*opening|opening.*this|what opening/.test(t)) {
@@ -1039,11 +1089,11 @@ function wordToNumber(word) {
   const num = parseInt(word, 10);
   if (!isNaN(num)) return num;
   const MAP = {
-    'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
-    'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10,
-    'eleven': 11, 'twelve': 12, 'thirteen': 13, 'fourteen': 14, 'fifteen': 15,
-    'sixteen': 16, 'seventeen': 17, 'eighteen': 18, 'nineteen': 19, 'twenty': 20,
-    'a': 1, 'an': 1, 'the': null
+    'one':1,'two':2,'three':3,'four':4,'five':5,
+    'six':6,'seven':7,'eight':8,'nine':9,'ten':10,
+    'eleven':11,'twelve':12,'thirteen':13,'fourteen':14,'fifteen':15,
+    'sixteen':16,'seventeen':17,'eighteen':18,'nineteen':19,'twenty':20,
+    'a':1,'an':1,'the':null
   };
   return MAP[word.toLowerCase()] ?? null;
 }
@@ -1073,18 +1123,18 @@ function processVoiceCommand(text, alternatives) {
     if (!parsed) continue;
 
     if (parsed.special === 'castle-kingside') {
-      if (tryMove('e1', 'g1')) { setMessage("Castled kingside!"); speak("Castled kingside"); return; }
+      if (tryMove('e1','g1')) { setMessage("Castled kingside!"); speak("Castled kingside"); return; }
       continue;
     }
     if (parsed.special === 'castle-queenside') {
-      if (tryMove('e1', 'c1')) { setMessage("Castled queenside!"); speak("Castled queenside"); return; }
+      if (tryMove('e1','c1')) { setMessage("Castled queenside!"); speak("Castled queenside"); return; }
       continue;
     }
 
     if (parsed.from && parsed.to) {
       if (tryMove(parsed.from, parsed.to, parsed.promotion)) {
         const last = moveHistory[moveHistory.length - 1];
-        const msg = `Moved ${last ? last.san : 'piece'}.`;
+        const msg  = `Moved ${last ? last.san : 'piece'}.`;
         setMessage(msg); speak(msg); return;
       }
       continue;
@@ -1142,20 +1192,20 @@ function processVoiceCommand(text, alternatives) {
       if (candidates.length === 1) {
         const m = candidates[0];
         if (tryMove(m.from, m.to, parsed.promotion)) {
-          const pName = { p: 'Pawn', n: 'Knight', b: 'Bishop', r: 'Rook', q: 'Queen', k: 'King' }[m.piece] || m.piece;
-          const msg = `${pName} to ${parsed.to}.`;
+          const pName = {p:'Pawn',n:'Knight',b:'Bishop',r:'Rook',q:'Queen',k:'King'}[m.piece] || m.piece;
+          const msg   = `${pName} to ${parsed.to}.`;
           setMessage(msg); speak(msg); return;
         }
       } else if (candidates.length > 1) {
-        const PNAME = { p: 'Pawn', n: 'Knight', b: 'Bishop', r: 'Rook', q: 'Queen', k: 'King' };
-        const PSHORT = { p: 'P', n: 'N', b: 'B', r: 'R', q: 'Q', k: 'K' };
-        const pName = PNAME[candidates[0].piece] || 'piece';
+        const PNAME = {p:'Pawn',n:'Knight',b:'Bishop',r:'Rook',q:'Queen',k:'King'};
+        const PSHORT = {p:'P',n:'N',b:'B',r:'R',q:'Q',k:'K'};
+        const pName  = PNAME[candidates[0].piece] || 'piece';
         const pShort = PSHORT[candidates[0].piece] || '';
-        const dest = parsed.to;  // e.g. "d4"
+        const dest   = parsed.to;  // e.g. "d4"
 
         // Build examples: "Nfd4 or Ned4" and "Knight fd4 or Knight ed4"
         const shortExamples = candidates.map(m => pShort + m.from[0] + dest).join(' or ');
-        const longExamples = candidates.map(m => pName + ' ' + m.from[0] + dest).join(' or ');
+        const longExamples  = candidates.map(m => pName + ' ' + m.from[0] + dest).join(' or ');
 
         const spokenMsg = `Ambiguous. Two ${pName}s can go to ${dest}. Say ${longExamples}.`;
         const displayMsg = `Two ${pName}s can reach ${dest}.
@@ -1176,7 +1226,7 @@ function speak(text) {
   if (isMuted) return;
   window.speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
-  u.rate = 1.1;
+  u.rate  = 1.1;
   window.speechSynthesis.speak(u);
 }
 
@@ -1185,31 +1235,7 @@ function setMessage(text) {
 }
 
 // ─── MUTE ────────────────────────────────────────────────────
-document.getElementById('mute-btn').addEventListener('click', function () {
-  isMuted = !isMuted;
-  this.textContent = isMuted ? '🔇' : '🔊';
-  if (isMuted) window.speechSynthesis.cancel();
-});
-
-// ─── INIT ────────────────────────────────────────────────────
-buildBoard();
-initSpeech();
-initStockfish();// ─── STOCKFISH ENGINE ────────────────────────────────────────
-// ─── SPEECH SYNTHESIS ────────────────────────────────────────
-function speak(text) {
-  if (isMuted) return;
-  window.speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.rate = 1.1;
-  window.speechSynthesis.speak(u);
-}
-
-function setMessage(text) {
-  document.getElementById('assistant-msg').textContent = `"${text}"`;
-}
-
-// ─── MUTE ────────────────────────────────────────────────────
-document.getElementById('mute-btn').addEventListener('click', function () {
+document.getElementById('mute-btn').addEventListener('click', function() {
   isMuted = !isMuted;
   this.textContent = isMuted ? '🔇' : '🔊';
   if (isMuted) window.speechSynthesis.cancel();
