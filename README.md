@@ -46,14 +46,6 @@ A voice-enabled chess web app built with Vanilla HTML, CSS, and JavaScript. Play
 ### 📜 Opening Book Display
 - Show the name of the opening being played (e.g. "Sicilian Defense")
 
-### 🎨 UI & UX
-- Dark theme with premium aesthetics
-- Board coordinates (rank numbers + file letters)
-- Last-move highlight, check indicator, king-in-check highlight
-- Game over overlay for checkmate and draw
-- Mute/unmute button for voice synthesis
-- Responsive layout (board left, voice + history right)
-
 ---
 
 ## 🔮 Upcoming Features
@@ -61,8 +53,6 @@ A voice-enabled chess web app built with Vanilla HTML, CSS, and JavaScript. Play
 
 - [ ] **Stockfish Integration** — Replace random Black moves with a real chess engine
 - [ ] **Difficulty Levels** — Easy (random), Medium (Stockfish depth 5), Hard (Stockfish depth 15)
-
-- [ ] **Board Flip** — Option to view the board from Black's perspective
 - [ ] **Piece Animation** — Smooth animated movement when pieces slide across the board
 - [ ] **Promotion UI** — Pop-up to choose promotion piece instead of auto-queen
 - [ ] **Undo Move** — Allow White to take back the last move
