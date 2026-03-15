@@ -517,6 +517,7 @@ function resetGame() {
   const turnDot = document.getElementById('turn-dot');
   if (turnDot) turnDot.style.display = '';
 
+  hideOpeningAnalysis();
   setMessage("Game reset. White to move.");
   updateHistory(); updateBoard(); updateRewindBanner();
 }
@@ -926,10 +927,49 @@ Return ONLY the JSON object, nothing else.`;
       }
     }
 
-    // All moves played — final state
+    // All moves played — fetch analysis
     if (openingSnapshot) {
       const bannerName = document.getElementById('opening-name');
       if (bannerName) bannerName.textContent = name;
+      setMessage(`"${name}" — fetching analysis…`);
+
+      // Hide tips, show analysis placeholder
+      const tipsEl = document.querySelector('.voice-tips');
+      if (tipsEl) tipsEl.style.display = 'none';
+
+      try {
+        const analysisPrompt = `You are a chess coach. Give a concise explanation of the ${name} chess opening.
+
+Return ONLY valid JSON (no markdown, no code blocks):
+{
+  "eco": "ECO code like B20 or C50",
+  "idea": "One sentence: the core strategic idea of this opening.",
+  "keyMoves": "One sentence: what White is typically trying to achieve in the first 10 moves.",
+  "watchOut": "One sentence: the main thing Black tries to do in response.",
+  "lichessSlug": "the-opening-name-hyphenated for lichess.org/opening/ URL, e.g. Sicilian_Defense"
+}`;
+
+        const resp = await fetch('/api/gemini', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: analysisPrompt })
+        });
+        const aData = await resp.json();
+
+        let analysis = null;
+        try {
+          const clean = aData.text.replace(/\`\`\`json|\`\`\`/g, '').trim();
+          analysis = JSON.parse(clean);
+        } catch(_) {}
+
+        if (analysis && openingSnapshot) {
+          showOpeningAnalysis(name, analysis);
+          speak("Analysis ready. Check the voice panel.");
+        }
+      } catch(_) {
+        // Analysis failed silently — still show the banner
+      }
+
       setMessage(`"${name}" — ${movesToShow.length} moves shown. Click ▶ Return to My Game when ready.`);
       speak("Opening complete. Click return to my game when ready.");
     }
@@ -956,6 +996,7 @@ function returnToGame() {
   legalMoves  = [];
 
   hideOpeningBanner();
+  hideOpeningAnalysis();
   updateBoard();
   updateHistory(true);
   setMessage("Back to your game.");
@@ -984,6 +1025,48 @@ function showOpeningBanner(state, name) {
 
 function hideOpeningBanner() {
   document.getElementById('opening-banner').style.display = 'none';
+}
+
+function showOpeningAnalysis(name, analysis) {
+  const el       = document.getElementById('opening-analysis');
+  const titleEl  = document.getElementById('analysis-title');
+  const ecoEl    = document.getElementById('analysis-eco');
+  const bodyEl   = document.getElementById('analysis-body');
+  const linksEl  = document.getElementById('analysis-links');
+  if (!el) return;
+
+  titleEl.textContent = name;
+  ecoEl.textContent   = analysis.eco || '';
+  ecoEl.title         = `ECO Code ${analysis.eco || ''} — Encyclopedia of Chess Openings classification`;
+
+  bodyEl.innerHTML = `
+    <p><strong>Idea:</strong> ${analysis.idea || ''}</p>
+    <p><strong>White's plan:</strong> ${analysis.keyMoves || ''}</p>
+    <p><strong>Black's response:</strong> ${analysis.watchOut || ''}</p>
+  `;
+
+  // Build links
+  const slug = analysis.lichessSlug || name.replace(/\s+/g,'_');
+  linksEl.innerHTML = `
+    <a class="analysis-link" href="https://lichess.org/opening/${slug}" target="_blank" rel="noopener">
+      <span class="analysis-link-icon">♜</span> Study on Lichess
+    </a>
+    <a class="analysis-link" href="https://www.chess.com/openings/${slug.replace(/_/g,'-').toLowerCase()}" target="_blank" rel="noopener">
+      <span class="analysis-link-icon">♟</span> Chess.com Opening Guide
+    </a>
+    <a class="analysis-link" href="https://en.wikipedia.org/wiki/${slug}" target="_blank" rel="noopener">
+      <span class="analysis-link-icon">📖</span> Wikipedia
+    </a>
+  `;
+
+  el.style.display = 'flex';
+}
+
+function hideOpeningAnalysis() {
+  const el = document.getElementById('opening-analysis');
+  if (el) el.style.display = 'none';
+  const tipsEl = document.querySelector('.voice-tips');
+  if (tipsEl) tipsEl.style.display = '';
 }
 
 // ─── VOICE HISTORY NAVIGATION ───────────────────────────────

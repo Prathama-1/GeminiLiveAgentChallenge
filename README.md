@@ -53,12 +53,9 @@ A voice-enabled chess web app built with Vanilla HTML, CSS, and JavaScript. Play
 ## 🔮 Upcoming Features
 
 - [ ] **UI change** — Need to chnage the UI after loading opening . The blue bar.
-- [ ] **Stockfish Integration** — Replace random Black moves with a real chess engine
-- [ ] **Piece Animation** — Smooth animated movement when pieces slide across the board
 - [ ] **Promotion UI** — Pop-up to choose promotion piece instead of auto-queen
 - [ ] **Undo Move** — Allow White to take back the last move
 - [ ] **PGN Export** — Download the game as a `.pgn` file for analysis in other tools
-- [ ] **Multiplayer Mode** — Play as both White and Black (pass-and-play)
 - [ ] **Mobile Optimization** — Full touch support and responsive board sizing
 
 ---
