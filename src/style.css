@@ -1017,3 +1017,233 @@ main {
 .piece.landing img {
   animation: piece-land 0.22s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
+
+/* ════════════════════════════════════════
+   DIFFICULTY TAB + PANEL
+════════════════════════════════════════ */
+
+/* ── Vertical tab on left edge ── */
+#diff-tab {
+  position: fixed;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 200;
+  background: var(--surface2);
+  border: 1px solid var(--border-md);
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+  padding: 0.85rem 0.5rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.2s var(--ease);
+  box-shadow: 2px 0 16px rgba(0, 0, 0, 0.4);
+}
+
+#diff-tab:hover {
+  background: var(--surface3);
+  border-color: var(--gold-dim);
+  box-shadow: 2px 0 20px rgba(212, 168, 67, 0.15);
+}
+
+#diff-tab:hover .diff-tab-icon {
+  color: var(--gold);
+}
+
+.diff-tab-icon {
+  font-size: 1.1rem;
+  color: var(--text-2);
+  transition: color 0.2s;
+  line-height: 1;
+}
+
+.diff-tab-label {
+  font-family: var(--font-mono);
+  font-size: 0.52rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  transform: rotate(180deg);
+}
+
+/* ── Slide-out panel ── */
+#diff-panel {
+  position: fixed;
+  left: -320px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 300px;
+  z-index: 300;
+  background: var(--surface);
+  border: 1px solid var(--border-md);
+  border-left: none;
+  border-radius: 0 12px 12px 0;
+  box-shadow: 4px 0 40px rgba(0, 0, 0, 0.6);
+  transition: left 0.3s var(--ease);
+  overflow: hidden;
+}
+
+#diff-panel.open {
+  left: 0;
+}
+
+.diff-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.2rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.diff-panel-title {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--gold);
+  font-weight: 500;
+}
+
+.diff-close {
+  background: none;
+  border: none;
+  color: var(--text-3);
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 0.2rem 0.3rem;
+  border-radius: 4px;
+  transition: color 0.15s;
+  line-height: 1;
+}
+
+.diff-close:hover {
+  color: var(--text);
+}
+
+/* ── Options ── */
+.diff-options {
+  padding: 0.6rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.diff-option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.18s var(--ease);
+  text-align: left;
+  width: 100%;
+}
+
+.diff-option:hover {
+  background: var(--surface2);
+  border-color: var(--border-md);
+}
+
+.diff-option.active {
+  background: var(--gold-subtle);
+  border-color: var(--gold-dim);
+}
+
+.diff-option.active .diff-option-name {
+  color: var(--gold);
+}
+
+.diff-option.active .diff-option-check {
+  opacity: 1;
+}
+
+.diff-option-icon {
+  font-size: 1.2rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.diff-option-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.diff-option-name {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 0.15rem;
+}
+
+.diff-option-desc {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--text-3);
+  line-height: 1.4;
+}
+
+.diff-option-check {
+  color: var(--gold);
+  font-size: 0.85rem;
+  opacity: 0;
+  flex-shrink: 0;
+  transition: opacity 0.15s;
+}
+
+/* ── Footer ── */
+.diff-current {
+  padding: 0.6rem 1.2rem 0.85rem;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--text-3);
+  border-top: 1px solid var(--border);
+  text-align: center;
+  letter-spacing: 0.05em;
+}
+
+.diff-current span {
+  color: var(--gold);
+  font-weight: 500;
+}
+
+/* ── Backdrop ── */
+#diff-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+}
+
+#diff-backdrop.visible {
+  display: block;
+}
+
+/* Difficulty badge in status bar */
+#diff-badge {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+#diff-badge .badge-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--gold);
+}

@@ -12,9 +12,64 @@
   <link rel="icon"
     href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♚</text></svg>">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+  <script src="stockfish.js"></script>
 </head>
 
 <body>
+
+  <!-- Difficulty Tab + Panel -->
+  <div id="diff-tab" onclick="toggleDiffPanel()" title="Difficulty">
+    <span class="diff-tab-icon">⚔</span>
+    <span class="diff-tab-label">Difficulty</span>
+  </div>
+
+  <div id="diff-panel">
+    <div class="diff-panel-header">
+      <span class="diff-panel-title">Engine Level</span>
+      <button class="diff-close" onclick="toggleDiffPanel()">✕</button>
+    </div>
+    <div class="diff-options">
+      <button class="diff-option" data-level="easy" onclick="setDifficulty('easy')">
+        <div class="diff-option-icon">🌱</div>
+        <div class="diff-option-info">
+          <div class="diff-option-name">Easy</div>
+          <div class="diff-option-desc">Stockfish depth 3 · Beginner friendly</div>
+        </div>
+        <div class="diff-option-check">✓</div>
+      </button>
+      <button class="diff-option" data-level="medium" onclick="setDifficulty('medium')">
+        <div class="diff-option-icon">⚡</div>
+        <div class="diff-option-info">
+          <div class="diff-option-name">Medium</div>
+          <div class="diff-option-desc">Stockfish depth 8 · Club player</div>
+        </div>
+        <div class="diff-option-check">✓</div>
+      </button>
+      <button class="diff-option active" data-level="hard" onclick="setDifficulty('hard')">
+        <div class="diff-option-icon">💀</div>
+        <div class="diff-option-info">
+          <div class="diff-option-name">Hard</div>
+          <div class="diff-option-desc">Stockfish depth 15 · Tournament strength</div>
+        </div>
+        <div class="diff-option-check">✓</div>
+      </button>
+      <button class="diff-option" data-level="random" onclick="setDifficulty('random')">
+        <div class="diff-option-icon">🎲</div>
+        <div class="diff-option-info">
+          <div class="diff-option-name">Random</div>
+          <div class="diff-option-desc">Pure random legal moves</div>
+        </div>
+        <div class="diff-option-check">✓</div>
+      </button>
+    </div>
+    <div class="diff-current">
+      Current: <span id="diff-current-label">Hard</span>
+    </div>
+  </div>
+
+  <!-- Backdrop to close panel -->
+  <div id="diff-backdrop" onclick="toggleDiffPanel()"></div>
+
 
   <header>
     <div class="logo">
@@ -51,6 +106,9 @@
           <span id="turn-label">White's Turn</span>
         </div>
         <span id="check-label">CHECK</span>
+        <div id="diff-badge">
+          <div class="badge-dot"></div><span id="diff-badge-label">Hard</span>
+        </div>
       </div>
 
       <div id="rewind-banner" style="display:none">

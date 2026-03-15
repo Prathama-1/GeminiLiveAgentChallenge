@@ -50,7 +50,7 @@ A voice-enabled chess web app built with Vanilla HTML, CSS, and JavaScript. Play
 
 ## 🔮 Upcoming Features
 
-
+- [ ] **UI change** — Need to chnage the UI after loading opening . The blue bar.
 - [ ] **Stockfish Integration** — Replace random Black moves with a real chess engine
 - [ ] **Difficulty Levels** — Easy (random), Medium (Stockfish depth 5), Hard (Stockfish depth 15)
 - [ ] **Piece Animation** — Smooth animated movement when pieces slide across the board
