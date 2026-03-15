@@ -46,13 +46,14 @@ A voice-enabled chess web app built with Vanilla HTML, CSS, and JavaScript. Play
 ### 📜 Opening Book Display
 - Show the name of the opening being played (e.g. "Sicilian Defense")
 
+### 🤖 Computer Opponent (Black)
+- [ ] **Stockfish and Difficulty Levels integration** — Easy, Medium, Hard, Random
 ---
 
 ## 🔮 Upcoming Features
 
 - [ ] **UI change** — Need to chnage the UI after loading opening . The blue bar.
 - [ ] **Stockfish Integration** — Replace random Black moves with a real chess engine
-- [ ] **Difficulty Levels** — Easy (random), Medium (Stockfish depth 5), Hard (Stockfish depth 15)
 - [ ] **Piece Animation** — Smooth animated movement when pieces slide across the board
 - [ ] **Promotion UI** — Pop-up to choose promotion piece instead of auto-queen
 - [ ] **Undo Move** — Allow White to take back the last move
