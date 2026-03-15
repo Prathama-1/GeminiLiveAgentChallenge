@@ -1109,3 +1109,21 @@ main {
   color: #e0b848;
 }
 .analysis-link-icon { font-size: 0.75rem; flex-shrink: 0; }
+
+
+/* ── Game over: Play Again in status bar ── */
+#play-again-btn {
+  background: var(--gold);
+  border: none;
+  color: #0a0a0b;
+  padding: 0.2rem 0.7rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+#play-again-btn:hover { background: #e0b848; }

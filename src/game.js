@@ -388,42 +388,29 @@ function checkGameOver() {
   const flashEl = document.getElementById('board-flash');
   if (flashEl) {
     flashEl.classList.remove('active');
-    void flashEl.offsetWidth; // force reflow to restart animation
+    void flashEl.offsetWidth;
     flashEl.classList.add('active');
     setTimeout(() => flashEl.classList.remove('active'), 1700);
   }
 
-  // Update status bar to show result
+  // Update status bar — replace turn indicator with result
   const turnLabel = document.getElementById('turn-label');
   const turnDot   = document.getElementById('turn-dot');
-  if (turnLabel) turnLabel.textContent = `${title} — ${sub}`;
-  if (turnDot)   turnDot.style.display = 'none';
-
-  // Show toast notification on the board
-  showGameOverToast(title, sub);
+  const checkLabel = document.getElementById('check-label');
+  if (turnLabel) {
+    turnLabel.textContent = `${title} — ${sub}`;
+    turnLabel.style.color = title === 'Checkmate' ? '#ff6b6b' : '#e8c07a';
+    turnLabel.style.fontWeight = '800';
+  }
+  if (turnDot)    turnDot.style.display = 'none';
+  if (checkLabel) checkLabel.classList.remove('visible');
+  const playBtn = document.getElementById('play-again-btn');
+  if (playBtn)    playBtn.style.display = 'inline-block';
 
   speak(`${title}. ${sub}.`);
 }
 
-function showGameOverToast(title, sub) {
-  // Remove any existing toast
-  const existing = document.getElementById('gameover-toast');
-  if (existing) existing.remove();
 
-  const toast = document.createElement('div');
-  toast.id = 'gameover-toast';
-  toast.innerHTML = `
-    <div class="toast-title">${title}</div>
-    <div class="toast-sub">${sub}</div>
-    <button class="toast-btn" onclick="resetGame()">Play Again</button>
-  `;
-
-  // Append to body — fixed position at bottom center of viewport
-  document.body.appendChild(toast);
-
-  // Animate in
-  requestAnimationFrame(() => toast.classList.add('visible'));
-}
 
 // ─── STATUS BAR ──────────────────────────────────────────────
 function updateStatus() {
@@ -509,13 +496,13 @@ function resetGame() {
   selectedSq = null; legalMoves = []; lastMove = null;
   moveHistory = []; fenHistory = []; viewingIndex = -1; dragSrc = null; lastAmbiguity = null;
 
-  // Remove game over toast if present
-  const toast = document.getElementById('gameover-toast');
-  if (toast) toast.remove();
-
-  // Reset status bar
-  const turnDot = document.getElementById('turn-dot');
-  if (turnDot) turnDot.style.display = '';
+  // Reset status bar styling
+  const turnLabel = document.getElementById('turn-label');
+  const turnDot   = document.getElementById('turn-dot');
+  if (turnLabel) { turnLabel.style.color = ''; turnLabel.style.fontWeight = ''; }
+  if (turnDot)   turnDot.style.display = '';
+  const playBtn = document.getElementById('play-again-btn');
+  if (playBtn)   playBtn.style.display = 'none';
 
   hideOpeningAnalysis();
   setMessage("Game reset. White to move.");
