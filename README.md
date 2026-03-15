@@ -41,7 +41,10 @@ A voice-enabled chess web app built with Vanilla HTML, CSS, and JavaScript. Play
 - Dragging, clicking, and voice are **blocked** while rewinding, with a helpful message
 
 ### 📜 History Navigation (Using voice)
-- [ ] **Voice History Navigation** — Say *"go back 3 moves"* or *"show me move 10"* to navigate history by voice
+- Say *"go back 3 moves"* or *"show me move 10"* to navigate history by voice
+
+### 📜 Opening Book Display
+- Show the name of the opening being played (e.g. "Sicilian Defense")
 
 ### 🎨 UI & UX
 - Dark theme with premium aesthetics
@@ -58,7 +61,7 @@ A voice-enabled chess web app built with Vanilla HTML, CSS, and JavaScript. Play
 
 - [ ] **Stockfish Integration** — Replace random Black moves with a real chess engine
 - [ ] **Difficulty Levels** — Easy (random), Medium (Stockfish depth 5), Hard (Stockfish depth 15)
-- [ ] **Opening Book Display** — Show the name of the opening being played (e.g. "Sicilian Defense")
+
 - [ ] **Board Flip** — Option to view the board from Black's perspective
 - [ ] **Piece Animation** — Smooth animated movement when pieces slide across the board
 - [ ] **Promotion UI** — Pop-up to choose promotion piece instead of auto-queen
