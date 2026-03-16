@@ -13,7 +13,6 @@ A voice-enabled chess web app built with Vanilla HTML, CSS, and JavaScript. Play
   - `"e2 to e4"` — move by explicit square coordinates
   - `"knight to f3"` — move a specific piece to a square
   - `"castle kingside"` / `"castle queenside"` — castling
-  - Phonetic alphabet support: `"echo 4"`, `"delta 5"`, etc.
 - If multiple pieces can reach the destination, it asks for clarification
 - Voice feedback via speech synthesis (can be muted)
 
@@ -50,26 +49,12 @@ A voice-enabled chess web app built with Vanilla HTML, CSS, and JavaScript. Play
 - [ ] **Stockfish and Difficulty Levels integration** — Easy, Medium, Hard, Random
 ---
 
-## 🔮 Upcoming Features
-
-- [ ] **UI change** — Need to chnage the UI after loading opening . The blue bar.
-- [ ] **Promotion UI** — Pop-up to choose promotion piece instead of auto-queen
-- [ ] **Undo Move** — Allow White to take back the last move
-- [ ] **PGN Export** — Download the game as a `.pgn` file for analysis in other tools
-- [ ] **Mobile Optimization** — Full touch support and responsive board sizing
-
----
-
 ## 🚀 Running Locally
 
 No build step needed. Serve the folder with any local server:
 
 ```bash
-# Python
-python -m http.server 8080
-
-# Node (npx)
-npx serve .
+node server.js
 ```
 
 
