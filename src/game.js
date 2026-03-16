@@ -92,7 +92,6 @@ function initStockfish() {
 
 function getStockfishMove(fen, depth, callback) {
   if (!stockfish || !sfReady) {
-    // Fallback to random if Stockfish not available
     callback(null);
     return;
   }
@@ -100,6 +99,7 @@ function getStockfishMove(fen, depth, callback) {
   stockfish.postMessage('position fen ' + fen);
   stockfish.postMessage('go depth ' + depth);
 }
+
 
 // ─── DIFFICULTY UI ───────────────────────────────────────────
 function toggleDiffPanel() {
@@ -518,19 +518,18 @@ function initSpeech() {
     setMessage("Use Chrome for voice support."); return;
   }
   const btn = document.getElementById('mic-btn');
-  btn.addEventListener('mousedown',  startListening);
-  btn.addEventListener('touchstart', startListening, { passive: true });
-  btn.addEventListener('mouseup',    stopListening);
-  btn.addEventListener('mouseleave', stopListening);
-  btn.addEventListener('touchend',   stopListening);
-  btn.onclick = null;
+  btn.addEventListener('click', () => {
+    if (isListening) stopListening();
+    else startListening();
+  });
 }
 
 function startListening() {
-  if (!SR) return;
   if (viewingIndex !== -1) { setMessage("Return to live position before using voice."); return; }
-  if (chess.turn() !== 'w') { setMessage("Voice is only for White. Wait for Black's move."); return; }
   if (chess.game_over() || isListening) return;
+  if (chess.turn() !== 'w') { setMessage("Voice is only for White's moves."); return; }
+
+  if (!SR) { setMessage("Use Chrome for voice support."); return; }
 
   const recognition          = new SR();
   recognition.continuous     = false;
@@ -540,25 +539,27 @@ function startListening() {
 
   recognition.onstart = () => {
     isListening = true;
-    const btn   = document.getElementById('mic-btn');
+    const btn = document.getElementById('mic-btn');
     btn.classList.add('listening');
-    btn.textContent = '🔴 Listening…';
-    setMessage("Listening… speak now.");
+    btn.textContent = '🔴 Click to Stop';
+    setMessage('Listening… speak now.');
   };
 
-  recognition.onresult = e => {
-    const transcripts = [];
-    for (let i = 0; i < e.results[0].length; i++)
-      transcripts.push(e.results[0][i].transcript.trim());
-    setMessage(`Heard: "${transcripts[0]}"`);
-    processVoiceCommand(transcripts[0], transcripts);
+  recognition.onresult = async (e) => {
+    const transcript = e.results[0][0].transcript.trim();
+    setMessage(`Heard: "${transcript}"`);
+    resetMicBtn();
+
+    // ── Navigation + difficulty commands: instant, no API call ──
+    if (tryVoiceNavigation(transcript)) return;
+
+    // ── Everything else: send to Nova Lite ───────────────────
+    await processWithNova(transcript);
   };
 
-  recognition.onerror = e => {
-    if (e.error === 'not-allowed')
-      setMessage("Microphone blocked. Allow mic access in browser settings.");
-    else if (e.error !== 'no-speech' && e.error !== 'aborted')
-      setMessage(`Error: ${e.error}. Try again.`);
+  recognition.onerror = (e) => {
+    if (e.error !== 'no-speech' && e.error !== 'aborted')
+      setMessage(`Mic error: ${e.error}`);
     resetMicBtn();
   };
 
@@ -583,7 +584,7 @@ function resetMicBtn() {
   isListening = false;
   const btn   = document.getElementById('mic-btn');
   btn.classList.remove('listening');
-  btn.textContent = '🎤 Hold to Speak';
+  btn.textContent = '🎤 Click to Speak';
 }
 
 // ─── VOICE COMMAND PARSER ────────────────────────────────────
@@ -740,6 +741,83 @@ function parseVoiceMove(text) {
 }
 
 
+// ─── NOVA 2 LITE VOICE PIPELINE ─────────────────────────────
+// Web Speech → Nova 2 Lite → interpret move/coaching → Web TTS
+async function processWithNova(transcript) {
+  setMessage('Thinking…');
+
+  try {
+    const recentSANs = moveHistory.slice(-6).map(m => m.san);
+    // Send full legal moves with from/to so Nova can match exactly
+    const legalNow = chess.moves({ verbose: true }).map(m => ({
+      san:  m.san,
+      from: m.from,
+      to:   m.to
+    }));
+
+    const resp = await fetch('/api/nova/move', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        transcript,
+        fen:         chess.fen(),
+        turn:        chess.turn() === 'w' ? 'White' : 'Black',
+        moveHistory: recentSANs,
+        legalMoves:  legalNow
+      })
+    });
+
+    if (!resp.ok) throw new Error(`Server error ${resp.status}`);
+    const data = await resp.json();
+
+    // Execute move if Nova identified one
+    if (data.move) {
+      const { from, to, promotion } = data.move;
+      const result = tryMove(from, to, promotion);
+      if (!result) {
+        // Nova got the wrong square — try local parser as fallback
+        const localParsed = parseVoiceMove(transcript);
+        let localWorked = false;
+        if (localParsed && localParsed.to) {
+          const allMoves = chess.moves({ verbose: true });
+          const candidates = allMoves.filter(m => m.to === localParsed.to &&
+            (!localParsed.pieceType || m.piece === localParsed.pieceType));
+          if (candidates.length === 1) {
+            localWorked = tryMove(candidates[0].from, candidates[0].to, 'q');
+          }
+        }
+        if (!localWorked) {
+          const msg = data.speech || `I heard "${transcript}" but couldn't find a legal move. Try saying the piece and square clearly.`;
+          setMessage(msg);
+          speak(msg);
+          return;
+        }
+      }
+    }
+
+    if (data.move) {
+      // Move played — show SAN, no voice unless coaching text returned
+      const last = moveHistory[moveHistory.length - 1];
+      if (data.speech && data.speech.trim()) {
+        setMessage(data.speech);
+        speak(data.speech);
+      } else if (last) {
+        setMessage(last.san);
+      }
+    } else if (data.speech && data.speech.trim()) {
+      // No move — coaching response or clarification needed
+      setMessage(data.speech);
+      speak(data.speech);
+    }
+
+  } catch (err) {
+    console.error('Nova error:', err);
+    // Fallback to local parser
+    setMessage(`Nova unavailable — using local parser for "${transcript}"`);
+    processVoiceCommand(transcript, [transcript]);
+  }
+}
+
 // ─── OPENING DETECTION ───────────────────────────────────────
 
 async function detectAndShowOpening() {
@@ -802,7 +880,7 @@ The "moves" array = canonical first 5-6 moves of this opening (both colors) in S
 Return ONLY the JSON object, nothing else.`;
 
   try {
-    const response = await fetch('/api/gemini', {
+    const response = await fetch('/api/nova', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt })
@@ -936,7 +1014,7 @@ Return ONLY valid JSON (no markdown, no code blocks):
   "lichessSlug": "the-opening-name-hyphenated for lichess.org/opening/ URL, e.g. Sicilian_Defense"
 }`;
 
-        const resp = await fetch('/api/gemini', {
+        const resp = await fetch('/api/nova', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ prompt: analysisPrompt })
@@ -1301,7 +1379,7 @@ function speak(text) {
 }
 
 function setMessage(text) {
-  document.getElementById('assistant-msg').textContent = `"${text}"`;
+  document.getElementById('assistant-msg').textContent = text;
 }
 
 // ─── MUTE ────────────────────────────────────────────────────
